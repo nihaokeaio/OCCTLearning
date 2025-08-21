@@ -27,7 +27,10 @@
 
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_ViewController.hxx>
+#include <map>
 #include <V3d_View.hxx>
+
+class AIS_Shape;
 
 //! Sample class creating 3D Viewer within GLFW window.
 class GlfwOcctView : protected AIS_ViewController
@@ -70,6 +73,13 @@ private:
                           const Handle(V3d_View)& theView) override;
 
     //! @name GLWF callbacks
+    void ExportMeshData(const TopoDS_Shape& shape, const std::string& filePath);
+
+    // 从屏幕坐标计算射线（适配OCCT 7.9.1）
+    void ComputeRayFromScreenPos(int x, int y, gp_Pnt& rayOrigin, gp_Dir& rayDir) const;
+
+    void SetShapeId(const std::string& Id,Handle(AIS_Shape) aisShape);
+
 private:
     //! Window resize event.
     void onResize(int theWidth, int theHeight);

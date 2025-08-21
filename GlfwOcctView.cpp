@@ -31,14 +31,29 @@
 #include <Aspect_DisplayConnection.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
+#include <BRepPrimAPI_MakeRevolution.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <Geom_Line.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
 #include <OpenGl_GraphicDriver.hxx>
 #include <TopAbs_ShapeEnum.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakeTorus.hxx>
+#include <IMeshTools_Parameters.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
+#include  <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
+#include <Graphic3d_Camera.hxx>
+#include <TDF_Label.hxx>
+#include <TDataStd_Name.hxx>
+#include <TPrsStd_AISPresentation.hxx>
 
 #include <iostream>
 
 #include <GLFW/glfw3.h>
+
+#include "SelectMgr.h"
 
 namespace
 {
@@ -186,7 +201,7 @@ void GlfwOcctView::initViewer()
     aViewer->SetDefaultLights();
     aViewer->SetLightOn();
     aViewer->SetDefaultTypeOfView(V3d_PERSPECTIVE);
-    aViewer->ActivateGrid(Aspect_GT_Rectangular, Aspect_GDM_Lines);
+    //aViewer->ActivateGrid(Aspect_GT_Rectangular, Aspect_GDM_Lines);
     myView = aViewer->CreateView();
     //myView->SetImmediateUpdate(Standard_False);
     myView->SetWindow(myOcctWindow, myOcctWindow->NativeGlContext());
@@ -202,6 +217,9 @@ void GlfwOcctView::initViewer()
     aCube->SetViewAnimation(this->ViewAnimation());
     aCube->SetFixedAnimationLoop(false);
     myContext->Display(aCube, false);
+
+    SelectMgr::Instance().SetInteractiveContext(myContext);
+    SelectMgr::Instance().SetViewer(aViewer);
 }
 
 void GlfwOcctView::initGui()
@@ -252,6 +270,7 @@ void GlfwOcctView::renderGui()
 // ================================================================
 void GlfwOcctView::initDemoScene()
 {
+
     if (myContext.IsNull())
     {
         return;
@@ -262,13 +281,74 @@ void GlfwOcctView::initDemoScene()
     gp_Ax2 anAxis;
     anAxis.SetLocation(gp_Pnt(0.0, 0.0, 0.0));
     Handle(AIS_Shape) aBox = new AIS_Shape(BRepPrimAPI_MakeBox(anAxis, 50, 50, 50).Shape());
+    aBox->SetTransparency(0.6);
+    SetShapeId("aBox",aBox);
     myContext->Display(aBox, AIS_Shaded, 0, false);
     anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
     Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
-    myContext->Display(aCone, AIS_Shaded, 0, false);
+    SetShapeId("aCone",aCone);
+    myContext->Display(aCone, AIS_WireFrame, 0, false); {
+        // 参数说明：主半径（圆环中心到管子中心），管子半径
+        Standard_Real majorRadius = 5.0; // 圆环主半径
+        Standard_Real minorRadius = 3.0; // 圆环截面半径
 
-    TCollection_AsciiString aGlInfo;
+        // 创建圆环
+        TopoDS_Shape torus = BRepPrimAPI_MakeTorus(majorRadius, minorRadius).Shape();
+        // 2. 配置离散参数（提高精度）
+        IMeshTools_Parameters meshParams;
+        meshParams.Deflection = minorRadius * 0.01; // 最大偏差（越小精度越高，建议 0.01~0.1）
+        meshParams.Angle = 0.5; // 角度公差（弧度，越小三角形越多，建议 0.5~2.0）
+        BRepMesh_IncrementalMesh mesher(torus, meshParams);
+
+        // 3. 确保离散成功
+        if (!mesher.IsDone()) {
+            // 处理离散失败（如检查参数是否合理）
+        }
+
+        gp_Trsf mat;
+        mat.SetTranslation(gp_Vec(100, 100, 100));
+        torus.Move(mat);
+        static bool isExport = true;
+        if (!isExport) {
+            ExportMeshData(torus, R""(C:\Users\ZQD\Desktop\data\torus.obj)"");
+        }
+        // 显示或进一步操作
+        Handle(AIS_Shape) aisTorus = new AIS_Shape(torus);
+        aisTorus->SetTransparency(0.3); // 可选：设置半透明
+        SetShapeId("aisTorus",aisTorus);
+        myContext->Display(aisTorus, AIS_Shaded, 0, false);
+    } {
+        auto origin = gp_Pnt{100, 0, 0};
+        auto direction = gp_Dir{0, 0, 1};
+        // 创建圆柱（箭头杆）
+        gp_Ax2 shaftAxis(origin, direction); // 轴系：原点+方向
+
+        BRepPrimAPI_MakeCylinder cylinderMaker(shaftAxis, 6 / 2, 100);
+        if (!cylinderMaker.IsDone()) {
+            int x = 1;
+            //Standard_Failure::Raise("创建圆柱失败");
+        }
+        Handle(AIS_Shape) aRevolution = new AIS_Shape(cylinderMaker.Shape());
+        aRevolution->SetTransparency(0.6);
+        SetShapeId("aRevolution",aRevolution);
+        myContext->Display(aRevolution, AIS_Shaded, 0, false);
+    }
+    //创建线段
     {
+        // 定义线段的起点和终点
+        gp_Pnt P1(0.0, 0.0, 0.0); // 起点 (x,y,z)
+        gp_Pnt P2(-100.0, -50.0, 50.0); // 终点
+
+        // 创建线段
+        TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(P1, P2).Edge();
+
+        // 可视化（可选）
+        Handle(AIS_Shape) aisEdge = new AIS_Shape(edge);
+        SetShapeId("aisEdge",aisEdge);
+        myContext->Display(aisEdge, AIS_Shaded, 0, false);
+    }
+
+    TCollection_AsciiString aGlInfo; {
         TColStd_IndexedDataMapOfStringString aRendInfo;
         myView->DiagnosticInformation(aRendInfo, Graphic3d_DiagnosticInfo_Basic);
         for (TColStd_IndexedDataMapOfStringString::Iterator aValueIter(aRendInfo); aValueIter.More(); aValueIter.Next())
@@ -289,6 +369,93 @@ void GlfwOcctView::handleViewRedraw(const Handle(AIS_InteractiveContext)& theCtx
 {
   AIS_ViewController::handleViewRedraw(theCtx, theView);
   myToWaitEvents = !myToAskNextFrame;
+}
+
+void GlfwOcctView::ExportMeshData(const TopoDS_Shape &shape, const std::string &filePath) {
+    std::ofstream file(filePath);
+    if (!file.is_open()) {
+        throw std::runtime_error("无法打开文件：" + filePath);
+    }
+
+    TopExp_Explorer faceExplorer(shape, TopAbs_FACE);
+    int vertexOffset = 0;
+
+    while (faceExplorer.More()) {
+        TopoDS_Face face = TopoDS::Face(faceExplorer.Current());
+        TopLoc_Location loc; // 位置变换
+        // 获取三角化网格（OCCT 7.6+ 最新API）
+        const Handle(Poly_Triangulation) &tri = BRep_Tool::Triangulation(face, loc);
+        if (tri.IsNull()) {
+            faceExplorer.Next();
+            continue;
+        }
+
+        // 1. 提取顶点（转换为全局坐标）
+        const auto &verticesLocal = tri->InternalNodes();
+        for (Standard_Integer i = verticesLocal.Lower(); i <= verticesLocal.Upper(); ++i) {
+            gp_Pnt pntGlobal = verticesLocal.Value(i).Transformed(loc.Transformation()); // 关键：应用位置变换
+            file << "v " << pntGlobal.X() << " " << pntGlobal.Y() << " " << pntGlobal.Z() << std::endl;
+        }
+
+        // 2. 提取三角形索引
+        const Poly_Array1OfTriangle &triangles = tri->InternalTriangles();
+        for (Standard_Integer i = triangles.Lower(); i <= triangles.Upper(); ++i) {
+            Standard_Integer v1, v2, v3;
+            triangles(i).Get(v1, v2, v3);
+            // 索引需加上顶点偏移量（多面时累加）
+            file << "f " << v1 + vertexOffset << " " << v2 + vertexOffset << " " << v3 + vertexOffset << std::endl;
+        }
+
+        vertexOffset += verticesLocal.Size();
+        faceExplorer.Next();
+    }
+
+    file.close();
+    std::cout << "全局网格数据已导出至：" << filePath << std::endl;
+}
+
+void GlfwOcctView::ComputeRayFromScreenPos(int x, int y, gp_Pnt &rayOrigin, gp_Dir &rayDir) const {
+    // 获取视图和相机信息
+    Handle(Graphic3d_Camera) camera = myView->Camera();
+    Standard_Integer viewWidth,viewHeight;
+    myView->Window()->Size(viewWidth,viewHeight);
+
+    // 将屏幕坐标标准化到[-1, 1]范围
+    Standard_Real nx = (2.0 * x) / viewWidth - 1.0;
+    Standard_Real ny = 1.0 - (2.0 * y) / viewHeight; // Y轴反转，因为屏幕Y向下
+
+    // 获取相机参数
+    gp_Pnt eye = camera->Eye();
+    gp_Pnt center = camera->Center();
+    gp_Dir viewDir = (center.XYZ() - eye.XYZ()).Normalized();
+
+
+    gp_Dir upDir = camera->Up();
+    gp_Dir rightDir = viewDir.Crossed(upDir).XYZ().Normalized();
+
+    // 计算视场角相关参数
+    Standard_Real fovy = camera->FOVy();
+    Standard_Real aspect = viewWidth / viewHeight;
+    Standard_Real tanFovy = tan(fovy / 2.0);
+
+    // 计算射线在相机坐标系中的方向
+    gp_Dir localDir(
+        nx * aspect * tanFovy,
+        ny * tanFovy,
+        1.0
+    );
+
+    // 转换到世界坐标系
+    rayOrigin = eye;
+    rayDir = gp_Dir(
+        localDir.X() * rightDir.X() + localDir.Y() * upDir.X() + localDir.Z() * viewDir.X(),
+        localDir.X() * rightDir.Y() + localDir.Y() * upDir.Y() + localDir.Z() * viewDir.Y(),
+        localDir.X() * rightDir.Z() + localDir.Y() * upDir.Z() + localDir.Z() * viewDir.Z()
+    );
+}
+
+void GlfwOcctView::SetShapeId(const std::string &Id, opencascade::handle<AIS_Shape> aisShape) {
+    SelectMgr::Instance().SetShapeId(Id,aisShape);;
 }
 
 // ================================================================
@@ -389,9 +556,14 @@ void GlfwOcctView::onMouseButton(int theButton, int theAction, int theMods)
     if (theAction == GLFW_PRESS)
     {
         PressMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
+        // gp_Pnt rayOrigin;
+        // gp_Dir rayDirection;
+        // ComputeRayFromScreenPos(aPos.x(),aPos.y(),rayOrigin,rayDirection);
+        // SelectMgr::Instance().SetScreenMousePos(aPos.x(),aPos.y());
+        // SelectMgr::Instance().GetHitPoint(rayOrigin, rayDirection);
+        SelectMgr::Instance().Test(aPos.x(),aPos.y());
     }
-    else
-    {
+    else {
         ReleaseMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
     }
 }
@@ -416,5 +588,11 @@ void GlfwOcctView::onMouseMove(int thePosX, int thePosY)
     {
         const Graphic3d_Vec2i aNewPos(thePosX, thePosY);
         UpdateMousePosition(aNewPos, PressedMouseButtons(), LastMouseFlags(), Standard_False);
+        // gp_Pnt rayOrigin;
+        // gp_Dir rayDirection;
+        // ComputeRayFromScreenPos(aNewPos.x(),aNewPos.y(),rayOrigin,rayDirection);
+        // SelectMgr::Instance().SetScreenMousePos(aNewPos.x(),aNewPos.y());
+        // SelectMgr::Instance().GetHitPoint(rayOrigin, rayDirection);
+        SelectMgr::Instance().TestForSnap(aNewPos.x(), aNewPos.y());
     }
 }
