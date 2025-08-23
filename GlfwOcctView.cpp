@@ -25,6 +25,8 @@
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
 
+#include "ClipperManager.h"
+
 #include <AIS_Shape.hxx>
 #include <AIS_ViewCube.hxx>
 #include <Aspect_Handle.hxx>
@@ -35,47 +37,50 @@
 #include <Message_Messenger.hxx>
 #include <OpenGl_GraphicDriver.hxx>
 #include <TopAbs_ShapeEnum.hxx>
-
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
+#include <TopoDS_Wire.hxx>
+#include <random> // 包含随机数库
 #include <iostream>
 
 #include <GLFW/glfw3.h>
 
 namespace
 {
-    //! Convert GLFW mouse button into Aspect_VKeyMouse.
-    static Aspect_VKeyMouse mouseButtonFromGlfw(int theButton)
-    {
-        switch (theButton)
-        {
-        case GLFW_MOUSE_BUTTON_LEFT:   return Aspect_VKeyMouse_LeftButton;
-        case GLFW_MOUSE_BUTTON_RIGHT:  return Aspect_VKeyMouse_RightButton;
-        case GLFW_MOUSE_BUTTON_MIDDLE: return Aspect_VKeyMouse_MiddleButton;
-        }
-        return Aspect_VKeyMouse_NONE;
-    }
+	//! Convert GLFW mouse button into Aspect_VKeyMouse.
+	static Aspect_VKeyMouse mouseButtonFromGlfw(int theButton)
+	{
+		switch (theButton)
+		{
+		case GLFW_MOUSE_BUTTON_LEFT:   return Aspect_VKeyMouse_LeftButton;
+		case GLFW_MOUSE_BUTTON_RIGHT:  return Aspect_VKeyMouse_RightButton;
+		case GLFW_MOUSE_BUTTON_MIDDLE: return Aspect_VKeyMouse_MiddleButton;
+		}
+		return Aspect_VKeyMouse_NONE;
+	}
 
-    //! Convert GLFW key modifiers into Aspect_VKeyFlags.
-    static Aspect_VKeyFlags keyFlagsFromGlfw(int theFlags)
-    {
-        Aspect_VKeyFlags aFlags = Aspect_VKeyFlags_NONE;
-        if ((theFlags & GLFW_MOD_SHIFT) != 0)
-        {
-            aFlags |= Aspect_VKeyFlags_SHIFT;
-        }
-        if ((theFlags & GLFW_MOD_CONTROL) != 0)
-        {
-            aFlags |= Aspect_VKeyFlags_CTRL;
-        }
-        if ((theFlags & GLFW_MOD_ALT) != 0)
-        {
-            aFlags |= Aspect_VKeyFlags_ALT;
-        }
-        if ((theFlags & GLFW_MOD_SUPER) != 0)
-        {
-            aFlags |= Aspect_VKeyFlags_META;
-        }
-        return aFlags;
-    }
+	//! Convert GLFW key modifiers into Aspect_VKeyFlags.
+	static Aspect_VKeyFlags keyFlagsFromGlfw(int theFlags)
+	{
+		Aspect_VKeyFlags aFlags = Aspect_VKeyFlags_NONE;
+		if ((theFlags & GLFW_MOD_SHIFT) != 0)
+		{
+			aFlags |= Aspect_VKeyFlags_SHIFT;
+		}
+		if ((theFlags & GLFW_MOD_CONTROL) != 0)
+		{
+			aFlags |= Aspect_VKeyFlags_CTRL;
+		}
+		if ((theFlags & GLFW_MOD_ALT) != 0)
+		{
+			aFlags |= Aspect_VKeyFlags_ALT;
+		}
+		if ((theFlags & GLFW_MOD_SUPER) != 0)
+		{
+			aFlags |= Aspect_VKeyFlags_META;
+		}
+		return aFlags;
+	}
 }
 
 // ================================================================
@@ -100,7 +105,7 @@ GlfwOcctView::~GlfwOcctView()
 // ================================================================
 GlfwOcctView* GlfwOcctView::toView(GLFWwindow* theWin)
 {
-    return static_cast<GlfwOcctView*>(glfwGetWindowUserPointer(theWin));
+	return static_cast<GlfwOcctView*>(glfwGetWindowUserPointer(theWin));
 }
 
 // ================================================================
@@ -109,7 +114,7 @@ GlfwOcctView* GlfwOcctView::toView(GLFWwindow* theWin)
 // ================================================================
 void GlfwOcctView::errorCallback(int theError, const char* theDescription)
 {
-    Message::DefaultMessenger()->Send(TCollection_AsciiString("Error") + theError + ": " + theDescription, Message_Fail);
+	Message::DefaultMessenger()->Send(TCollection_AsciiString("Error") + theError + ": " + theDescription, Message_Fail);
 }
 
 // ================================================================
@@ -118,19 +123,19 @@ void GlfwOcctView::errorCallback(int theError, const char* theDescription)
 // ================================================================
 void GlfwOcctView::run()
 {
-    initWindow(800, 600, "OCCT IMGUI");
-    initViewer();
-    initDemoScene();
-    if (myView.IsNull())
-    {
-        return;
-    }
+	initWindow(800, 600, "OCCT IMGUI");
+	initViewer();
+	initDemoScene();
+	if (myView.IsNull())
+	{
+		return;
+	}
 
-    myView->MustBeResized();
-    myOcctWindow->Map();
-    initGui();
-    mainloop();
-    cleanup();
+	myView->MustBeResized();
+	myOcctWindow->Map();
+	initGui();
+	mainloop();
+	cleanup();
 }
 
 // ================================================================
@@ -139,31 +144,34 @@ void GlfwOcctView::run()
 // ================================================================
 void GlfwOcctView::initWindow(int theWidth, int theHeight, const char* theTitle)
 {
-    glfwSetErrorCallback(GlfwOcctView::errorCallback);
-    glfwInit();
-    const bool toAskCoreProfile = true;
-    if (toAskCoreProfile)
-    {
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwSetErrorCallback(GlfwOcctView::errorCallback);
+	glfwInit();
+	const bool toAskCoreProfile = true;
+	if (toAskCoreProfile)
+	{
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 #if defined (__APPLE__)
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        //glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, true);
-        //glfwWindowHint(GLFW_DECORATED, GL_FALSE);
-    }
-    myOcctWindow = new GlfwOcctWindow(theWidth, theHeight, theTitle);
-    glfwSetWindowUserPointer(myOcctWindow->getGlfwWindow(), this);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		//glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, true);
+		//glfwWindowHint(GLFW_DECORATED, GL_FALSE);
+	}
+	myOcctWindow = new GlfwOcctWindow(theWidth, theHeight, theTitle);
+	glfwSetWindowUserPointer(myOcctWindow->getGlfwWindow(), this);
 
-    // window callback
-    glfwSetWindowSizeCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onResizeCallback);
-    glfwSetFramebufferSizeCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onFBResizeCallback);
+	// window callback
+	glfwSetWindowSizeCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onResizeCallback);
+	glfwSetFramebufferSizeCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onFBResizeCallback);
 
-    // mouse callback
-    glfwSetScrollCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onMouseScrollCallback);
-    glfwSetMouseButtonCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onMouseButtonCallback);
-    glfwSetCursorPosCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onMouseMoveCallback);
+	// mouse callback
+	glfwSetScrollCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onMouseScrollCallback);
+	glfwSetMouseButtonCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onMouseButtonCallback);
+	glfwSetCursorPosCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onMouseMoveCallback);
+
+	//key callback
+	glfwSetKeyCallback(myOcctWindow->getGlfwWindow(), GlfwOcctView::onKeyCallback);
 }
 
 // ================================================================
@@ -172,78 +180,78 @@ void GlfwOcctView::initWindow(int theWidth, int theHeight, const char* theTitle)
 // ================================================================
 void GlfwOcctView::initViewer()
 {
-    if (myOcctWindow.IsNull()
-        || myOcctWindow->getGlfwWindow() == nullptr)
-    {
-        return;
-    }
+	if (myOcctWindow.IsNull()
+		|| myOcctWindow->getGlfwWindow() == nullptr)
+	{
+		return;
+	}
 
-    Handle(OpenGl_GraphicDriver) aGraphicDriver
-        = new OpenGl_GraphicDriver(myOcctWindow->GetDisplay(), Standard_False);
-    aGraphicDriver->SetBuffersNoSwap(Standard_True);
+	Handle(OpenGl_GraphicDriver) aGraphicDriver
+		= new OpenGl_GraphicDriver(myOcctWindow->GetDisplay(), Standard_False);
+	aGraphicDriver->SetBuffersNoSwap(Standard_True);
 
-    Handle(V3d_Viewer) aViewer = new V3d_Viewer(aGraphicDriver);
-    aViewer->SetDefaultLights();
-    aViewer->SetLightOn();
-    aViewer->SetDefaultTypeOfView(V3d_PERSPECTIVE);
-    aViewer->ActivateGrid(Aspect_GT_Rectangular, Aspect_GDM_Lines);
-    myView = aViewer->CreateView();
-    //myView->SetImmediateUpdate(Standard_False);
-    myView->SetWindow(myOcctWindow, myOcctWindow->NativeGlContext());
-    myView->ChangeRenderingParams().ToShowStats = Standard_True;
+	Handle(V3d_Viewer) aViewer = new V3d_Viewer(aGraphicDriver);
+	aViewer->SetDefaultLights();
+	aViewer->SetLightOn();
+	aViewer->SetDefaultTypeOfView(V3d_PERSPECTIVE);
+	aViewer->ActivateGrid(Aspect_GT_Rectangular, Aspect_GDM_Lines);
+	myView = aViewer->CreateView();
+	//myView->SetImmediateUpdate(Standard_False);
+	myView->SetWindow(myOcctWindow, myOcctWindow->NativeGlContext());
+	myView->ChangeRenderingParams().ToShowStats = Standard_True;
 
-    myContext = new AIS_InteractiveContext(aViewer);
+	myContext = new AIS_InteractiveContext(aViewer);
 
-    Handle(AIS_ViewCube) aCube = new AIS_ViewCube();
-    aCube->SetSize(55);
-    aCube->SetFontHeight(12);
-    aCube->SetAxesLabels("", "", "");
-    aCube->SetTransformPersistence(new Graphic3d_TransformPers(Graphic3d_TMF_TriedronPers, Aspect_TOTP_LEFT_LOWER, Graphic3d_Vec2i(100, 100)));
-    aCube->SetViewAnimation(this->ViewAnimation());
-    aCube->SetFixedAnimationLoop(false);
-    myContext->Display(aCube, false);
+	Handle(AIS_ViewCube) aCube = new AIS_ViewCube();
+	aCube->SetSize(55);
+	aCube->SetFontHeight(12);
+	aCube->SetAxesLabels("", "", "");
+	aCube->SetTransformPersistence(new Graphic3d_TransformPers(Graphic3d_TMF_TriedronPers, Aspect_TOTP_LEFT_LOWER, Graphic3d_Vec2i(100, 100)));
+	aCube->SetViewAnimation(this->ViewAnimation());
+	aCube->SetFixedAnimationLoop(false);
+	myContext->Display(aCube, false);
 }
 
 void GlfwOcctView::initGui()
 {
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
 
-    ImGuiIO& aIO = ImGui::GetIO();
-    aIO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	ImGuiIO& aIO = ImGui::GetIO();
+	aIO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-    ImGui_ImplGlfw_InitForOpenGL(myOcctWindow->getGlfwWindow(), Standard_True);
-    ImGui_ImplOpenGL3_Init("#version 330");
+	ImGui_ImplGlfw_InitForOpenGL(myOcctWindow->getGlfwWindow(), Standard_True);
+	ImGui_ImplOpenGL3_Init("#version 330");
 
-    // Setup Dear ImGui style.
-    //ImGui::StyleColorsClassic();
+	// Setup Dear ImGui style.
+	//ImGui::StyleColorsClassic();
 }
 
 void GlfwOcctView::renderGui()
 {
-    ImGuiIO& aIO = ImGui::GetIO();
+	ImGuiIO& aIO = ImGui::GetIO();
 
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
 
-    ImGui::NewFrame();
+	ImGui::NewFrame();
 
-    ImGui::ShowDemoWindow();
+	ImGui::ShowDemoWindow();
 
-    // Hello IMGUI.
-    ImGui::Begin("Hello");
-    ImGui::Text("Hello ImGui!");
-    ImGui::Text("Hello OpenCASCADE!");
-    ImGui::Button("OK");
-    ImGui::SameLine();
-    ImGui::Button("Cancel");
-    ImGui::End();
+	// Hello IMGUI.
+	ImGui::Begin("Hello");
+	ImGui::Text("Hello ImGui!");
+	ImGui::Text("Hello OpenCASCADE!");
+	ImGui::Button("OK");
+	ImGui::SameLine();
+	ImGui::Button("Cancel");
+	ImGui::End();
 
-    ImGui::Render();
+	ImGui::Render();
 
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    glfwSwapBuffers(myOcctWindow->getGlfwWindow());
+	glfwSwapBuffers(myOcctWindow->getGlfwWindow());
 }
 
 // ================================================================
@@ -252,32 +260,60 @@ void GlfwOcctView::renderGui()
 // ================================================================
 void GlfwOcctView::initDemoScene()
 {
-    if (myContext.IsNull())
-    {
-        return;
-    }
+	if (myContext.IsNull())
+	{
+		return;
+	}
 
-    myView->TriedronDisplay(Aspect_TOTP_LEFT_LOWER, Quantity_NOC_GOLD, 0.08, V3d_WIREFRAME);
+	myView->TriedronDisplay(Aspect_TOTP_LEFT_LOWER, Quantity_NOC_GOLD, 0.08, V3d_WIREFRAME);
 
-    gp_Ax2 anAxis;
-    anAxis.SetLocation(gp_Pnt(0.0, 0.0, 0.0));
-    Handle(AIS_Shape) aBox = new AIS_Shape(BRepPrimAPI_MakeBox(anAxis, 50, 50, 50).Shape());
-    myContext->Display(aBox, AIS_Shaded, 0, false);
-    anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
-    Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
-    myContext->Display(aCone, AIS_Shaded, 0, false);
+	/*gp_Ax2 anAxis;
+	anAxis.SetLocation(gp_Pnt(0.0, 0.0, 0.0));
+	Handle(AIS_Shape) aBox = new AIS_Shape(BRepPrimAPI_MakeBox(anAxis, 50, 50, 50).Shape());
+	myContext->Display(aBox, AIS_Shaded, 0, false);
+	anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
+	Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
+	myContext->Display(aCone, AIS_Shaded, 0, false);*/
 
-    TCollection_AsciiString aGlInfo;
-    {
-        TColStd_IndexedDataMapOfStringString aRendInfo;
-        myView->DiagnosticInformation(aRendInfo, Graphic3d_DiagnosticInfo_Basic);
-        for (TColStd_IndexedDataMapOfStringString::Iterator aValueIter(aRendInfo); aValueIter.More(); aValueIter.Next())
-        {
-            if (!aGlInfo.IsEmpty()) { aGlInfo += "\n"; }
-            aGlInfo += TCollection_AsciiString("  ") + aValueIter.Key() + ": " + aValueIter.Value();
-        }
-    }
-    Message::DefaultMessenger()->Send(TCollection_AsciiString("OpenGL info:\n") + aGlInfo, Message_Info);
+	//创建线段
+	{
+		// 定义点集
+		gp_Pnt P1(0, 0, 0);
+		gp_Pnt P2(100, 0, 0);
+		gp_Pnt P3(100, 100, 80);
+		gp_Pnt P4(0, 100, 80);
+		myPath.push_back(P1);
+		myPath.push_back(P2);
+		myPath.push_back(P3);
+		myPath.push_back(P4);
+
+		// 创建折线构建器
+		BRepBuilderAPI_MakePolygon polyBuilder;
+		polyBuilder.Add(P1);
+		polyBuilder.Add(P2);
+		polyBuilder.Add(P3);
+		polyBuilder.Add(P4);
+		//polyBuilder.Add(P1); // 闭合折线（可选）
+
+		// 获取结果
+		TopoDS_Wire wire = polyBuilder.Wire(); // 折线组成的Wire
+
+		// 可视化（可选）
+		Handle(AIS_Shape) aisEdge = new AIS_Shape(wire);
+		myContext->Display(aisEdge, AIS_Shaded, 0, false);
+	}
+
+	TCollection_AsciiString aGlInfo;
+	{
+		TColStd_IndexedDataMapOfStringString aRendInfo;
+		myView->DiagnosticInformation(aRendInfo, Graphic3d_DiagnosticInfo_Basic);
+		for (TColStd_IndexedDataMapOfStringString::Iterator aValueIter(aRendInfo); aValueIter.More(); aValueIter.Next())
+		{
+			if (!aGlInfo.IsEmpty()) { aGlInfo += "\n"; }
+			aGlInfo += TCollection_AsciiString("  ") + aValueIter.Key() + ": " + aValueIter.Value();
+		}
+	}
+	Message::DefaultMessenger()->Send(TCollection_AsciiString("OpenGL info:\n") + aGlInfo, Message_Info);
 }
 
 // ================================================================
@@ -285,10 +321,10 @@ void GlfwOcctView::initDemoScene()
 // Purpose  :
 // ================================================================
 void GlfwOcctView::handleViewRedraw(const Handle(AIS_InteractiveContext)& theCtx,
-                                    const Handle(V3d_View)& theView)
+	const Handle(V3d_View)& theView)
 {
-  AIS_ViewController::handleViewRedraw(theCtx, theView);
-  myToWaitEvents = !myToAskNextFrame;
+	AIS_ViewController::handleViewRedraw(theCtx, theView);
+	myToWaitEvents = !myToAskNextFrame;
 }
 
 // ================================================================
@@ -297,26 +333,26 @@ void GlfwOcctView::handleViewRedraw(const Handle(AIS_InteractiveContext)& theCtx
 // ================================================================
 void GlfwOcctView::mainloop()
 {
-    while (!glfwWindowShouldClose(myOcctWindow->getGlfwWindow()))
-    {
-        // glfwPollEvents() for continuous rendering (immediate return if there are no new events)
-        // and glfwWaitEvents() for rendering on demand (something actually happened in the viewer)
-        if (myToWaitEvents)
-        {
-          glfwWaitEvents();
-        }
-        else
-        {
-          glfwPollEvents();
-        }
-        if (!myView.IsNull())
-        {
-            myView->InvalidateImmediate(); // redraw view even if it wasn't modified
-            FlushViewEvents(myContext, myView, Standard_True);
+	while (!glfwWindowShouldClose(myOcctWindow->getGlfwWindow()))
+	{
+		// glfwPollEvents() for continuous rendering (immediate return if there are no new events)
+		// and glfwWaitEvents() for rendering on demand (something actually happened in the viewer)
+		if (myToWaitEvents)
+		{
+			glfwWaitEvents();
+		}
+		else
+		{
+			glfwPollEvents();
+		}
+		if (!myView.IsNull())
+		{
+			myView->InvalidateImmediate(); // redraw view even if it wasn't modified
+			FlushViewEvents(myContext, myView, Standard_True);
 
-            renderGui();
-        }
-    }
+			renderGui();
+		}
+	}
 }
 
 // ================================================================
@@ -325,21 +361,21 @@ void GlfwOcctView::mainloop()
 // ================================================================
 void GlfwOcctView::cleanup()
 {
-    // Cleanup IMGUI.
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+	// Cleanup IMGUI.
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 
-    if (!myView.IsNull())
-    {
-        myView->Remove();
-    }
-    if (!myOcctWindow.IsNull())
-    {
-        myOcctWindow->Close();
-    }
+	if (!myView.IsNull())
+	{
+		myView->Remove();
+	}
+	if (!myOcctWindow.IsNull())
+	{
+		myOcctWindow->Close();
+	}
 
-    glfwTerminate();
+	glfwTerminate();
 }
 
 // ================================================================
@@ -348,16 +384,16 @@ void GlfwOcctView::cleanup()
 // ================================================================
 void GlfwOcctView::onResize(int theWidth, int theHeight)
 {
-    if (theWidth != 0
-        && theHeight != 0
-        && !myView.IsNull())
-    {
-        myView->Window()->DoResize();
-        myView->MustBeResized();
-        myView->Invalidate();
-        FlushViewEvents(myContext, myView, true);
-        renderGui();
-    }
+	if (theWidth != 0
+		&& theHeight != 0
+		&& !myView.IsNull())
+	{
+		myView->Window()->DoResize();
+		myView->MustBeResized();
+		myView->Invalidate();
+		FlushViewEvents(myContext, myView, true);
+		renderGui();
+	}
 }
 
 // ================================================================
@@ -366,11 +402,11 @@ void GlfwOcctView::onResize(int theWidth, int theHeight)
 // ================================================================
 void GlfwOcctView::onMouseScroll(double theOffsetX, double theOffsetY)
 {
-    ImGuiIO& aIO = ImGui::GetIO();
-    if (!myView.IsNull() && !aIO.WantCaptureMouse)
-    {
-        UpdateZoom(Aspect_ScrollDelta(myOcctWindow->CursorPosition(), int(theOffsetY * 8.0)));
-    }
+	ImGuiIO& aIO = ImGui::GetIO();
+	if (!myView.IsNull() && !aIO.WantCaptureMouse)
+	{
+		UpdateZoom(Aspect_ScrollDelta(myOcctWindow->CursorPosition(), int(theOffsetY * 8.0)));
+	}
 }
 
 // ================================================================
@@ -379,21 +415,21 @@ void GlfwOcctView::onMouseScroll(double theOffsetX, double theOffsetY)
 // ================================================================
 void GlfwOcctView::onMouseButton(int theButton, int theAction, int theMods)
 {
-    ImGuiIO& aIO = ImGui::GetIO();
-    if (myView.IsNull() || aIO.WantCaptureMouse)
-    {
-        return;
-    }
+	ImGuiIO& aIO = ImGui::GetIO();
+	if (myView.IsNull() || aIO.WantCaptureMouse)
+	{
+		return;
+	}
 
-    const Graphic3d_Vec2i aPos = myOcctWindow->CursorPosition();
-    if (theAction == GLFW_PRESS)
-    {
-        PressMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
-    }
-    else
-    {
-        ReleaseMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
-    }
+	const Graphic3d_Vec2i aPos = myOcctWindow->CursorPosition();
+	if (theAction == GLFW_PRESS)
+	{
+		PressMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
+	}
+	else
+	{
+		ReleaseMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
+	}
 }
 
 // ================================================================
@@ -402,19 +438,55 @@ void GlfwOcctView::onMouseButton(int theButton, int theAction, int theMods)
 // ================================================================
 void GlfwOcctView::onMouseMove(int thePosX, int thePosY)
 {
-    if (myView.IsNull())
-    {
-        return;
-    }
+	if (myView.IsNull())
+	{
+		return;
+	}
 
-    ImGuiIO& aIO = ImGui::GetIO();
-    if (aIO.WantCaptureMouse)
-    {
-        //myView->Redraw();
-    }
-    else
-    {
-        const Graphic3d_Vec2i aNewPos(thePosX, thePosY);
-        UpdateMousePosition(aNewPos, PressedMouseButtons(), LastMouseFlags(), Standard_False);
-    }
+	ImGuiIO& aIO = ImGui::GetIO();
+	if (aIO.WantCaptureMouse)
+	{
+		//myView->Redraw();
+	}
+	else
+	{
+		const Graphic3d_Vec2i aNewPos(thePosX, thePosY);
+		UpdateMousePosition(aNewPos, PressedMouseButtons(), LastMouseFlags(), Standard_False);
+	}
+}
+
+void GlfwOcctView::onKeyCallback(int key, int scancode, int action, int mods)
+{
+	static int count = 0;
+	++count;
+	if (key == GLFW_KEY_W && count % 2 == 1) {
+		std::random_device rd;  // 随机设备，用于种子
+		std::mt19937 gen(rd()); // Mersenne Twister 引擎
+		std::uniform_int_distribution<> dis(0, 500); // 均匀分布 [0, 500]
+
+		// 2. 生成随机数
+		int random_num = dis(gen);
+		ClipperManager climgr;
+		climgr.setPath(myPath);
+		climgr.setOffset(-static_cast<double>(count));
+		if (climgr.perform())
+		{
+			std::vector<gp_Pnt> offsetPaths;
+			climgr.getOutPath(offsetPaths);
+
+			// 创建折线构建器
+			BRepBuilderAPI_MakePolygon polyBuilder;
+			for (const auto& p : offsetPaths) {
+				polyBuilder.Add(p);
+			}
+			//polyBuilder.Add(offsetPaths.front()); // 闭合折线（可选）
+			// 获取结果
+			TopoDS_Wire wire = polyBuilder.Wire(); // 折线组成的Wire
+			// 可视化（可选）
+			Handle(AIS_Shape) aisEdge = new AIS_Shape(wire);
+			aisEdge->SetColor(static_cast<Quantity_NameOfColor>(random_num));
+			myContext->Display(aisEdge, AIS_Shaded, 0, false);
+
+		}
+	}
 }

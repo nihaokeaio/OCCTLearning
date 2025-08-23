@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 
+if(NOT DEFINED CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 17)
+    set(CMAKE_CXX_STANDARD 17)
+endif()
+
 # Project configuration
 project(OcctImgui LANGUAGES CXX)
 
@@ -8,9 +12,14 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/${CMAKE_BUILD_TYPE})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/${CMAKE_BUILD_TYPE})
 
+if(DEFINED ENV{CLIPPERDIR})
+    set(Clipper2_DIR "$ENV{CLIPPERDIR}/out/build/x64-Debug")
+endif()
+
 # Include directories
 find_package(glfw3 REQUIRED)
 find_package(OpenCASCADE REQUIRED)
+find_package(Clipper2 REQUIRED)
 
 file(GLOB_RECURSE SOURCES
     "${CMAKE_SOURCE_DIR}/*.cpp"
@@ -26,7 +35,7 @@ add_executable(OcctImgui ${SOURCES})
 # Link libraries
 target_link_libraries(OcctImgui
 PRIVATE    TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKMesh TKService TKOpenGl TKV3d
-  glfw
+  glfw Clipper2
 )
 
 target_compile_options(OcctImgui PRIVATE

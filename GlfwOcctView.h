@@ -33,102 +33,109 @@
 class GlfwOcctView : protected AIS_ViewController
 {
 public:
-    //! Default constructor.
-    GlfwOcctView();
+	//! Default constructor.
+	GlfwOcctView();
 
-    //! Destructor.
-    ~GlfwOcctView();
+	//! Destructor.
+	~GlfwOcctView();
 
-    //! Main application entry point.
-    void run();
-
-private:
-
-    //! Create GLFW window.
-    void initWindow(int theWidth, int theHeight, const char* theTitle);
-
-    //! Create 3D Viewer.
-    void initViewer();
-
-    //! Init ImGui.
-    void initGui();
-
-    //! Render ImGUI.
-    void renderGui();
-
-    //! Fill 3D Viewer with a DEMO items.
-    void initDemoScene();
-
-    //! Application event loop.
-    void mainloop();
-
-    //! Clean up before .
-    void cleanup();
-
-    //! Handle view redraw.
-    void handleViewRedraw(const Handle(AIS_InteractiveContext)& theCtx,
-                          const Handle(V3d_View)& theView) override;
-
-    //! @name GLWF callbacks
-private:
-    //! Window resize event.
-    void onResize(int theWidth, int theHeight);
-
-    //! Mouse scroll event.
-    void onMouseScroll(double theOffsetX, double theOffsetY);
-
-    //! Mouse click event.
-    void onMouseButton(int theButton, int theAction, int theMods);
-
-    //! Mouse move event.
-    void onMouseMove(int thePosX, int thePosY);
-
-    //! @name GLWF callbacks (static functions)
-private:
-
-    //! GLFW callback redirecting messages into Message::DefaultMessenger().
-    static void errorCallback(int theError, const char* theDescription);
-
-    //! Wrapper for glfwGetWindowUserPointer() returning this class instance.
-    static GlfwOcctView* toView(GLFWwindow* theWin);
-
-    //! Window resize callback.
-    static void onResizeCallback(GLFWwindow* theWin, int theWidth, int theHeight)
-    {
-        toView(theWin)->onResize(theWidth, theHeight);
-    }
-
-    //! Frame-buffer resize callback.
-    static void onFBResizeCallback(GLFWwindow* theWin, int theWidth, int theHeight)
-    {
-        toView(theWin)->onResize(theWidth, theHeight);
-    }
-
-    //! Mouse scroll callback.
-    static void onMouseScrollCallback(GLFWwindow* theWin, double theOffsetX, double theOffsetY)
-    {
-        toView(theWin)->onMouseScroll(theOffsetX, theOffsetY);
-    }
-
-    //! Mouse click callback.
-    static void onMouseButtonCallback(GLFWwindow* theWin, int theButton, int theAction, int theMods)
-    {
-        toView(theWin)->onMouseButton(theButton, theAction, theMods);
-    }
-
-    //! Mouse move callback.
-    static void onMouseMoveCallback(GLFWwindow* theWin, double thePosX, double thePosY)
-    {
-        toView(theWin)->onMouseMove((int)thePosX, (int)thePosY);
-    }
+	//! Main application entry point.
+	void run();
 
 private:
 
-    Handle(GlfwOcctWindow) myOcctWindow;
-    Handle(V3d_View) myView;
-    Handle(AIS_InteractiveContext) myContext;
-    bool myToWaitEvents = true;
+	//! Create GLFW window.
+	void initWindow(int theWidth, int theHeight, const char* theTitle);
 
+	//! Create 3D Viewer.
+	void initViewer();
+
+	//! Init ImGui.
+	void initGui();
+
+	//! Render ImGUI.
+	void renderGui();
+
+	//! Fill 3D Viewer with a DEMO items.
+	void initDemoScene();
+
+	//! Application event loop.
+	void mainloop();
+
+	//! Clean up before .
+	void cleanup();
+
+	//! Handle view redraw.
+	void handleViewRedraw(const Handle(AIS_InteractiveContext)& theCtx,
+		const Handle(V3d_View)& theView) override;
+
+	//! @name GLWF callbacks
+private:
+	//! Window resize event.
+	void onResize(int theWidth, int theHeight);
+
+	//! Mouse scroll event.
+	void onMouseScroll(double theOffsetX, double theOffsetY);
+
+	//! Mouse click event.
+	void onMouseButton(int theButton, int theAction, int theMods);
+
+	//! Mouse move event.
+	void onMouseMove(int thePosX, int thePosY);
+
+	//! Key event
+	void onKeyCallback(int key, int scancode, int action, int mods);
+	//! @name GLWF callbacks (static functions)
+private:
+
+	//! GLFW callback redirecting messages into Message::DefaultMessenger().
+	static void errorCallback(int theError, const char* theDescription);
+
+	//! Wrapper for glfwGetWindowUserPointer() returning this class instance.
+	static GlfwOcctView* toView(GLFWwindow* theWin);
+
+	//! Window resize callback.
+	static void onResizeCallback(GLFWwindow* theWin, int theWidth, int theHeight)
+	{
+		toView(theWin)->onResize(theWidth, theHeight);
+	}
+
+	//! Frame-buffer resize callback.
+	static void onFBResizeCallback(GLFWwindow* theWin, int theWidth, int theHeight)
+	{
+		toView(theWin)->onResize(theWidth, theHeight);
+	}
+
+	//! Mouse scroll callback.
+	static void onMouseScrollCallback(GLFWwindow* theWin, double theOffsetX, double theOffsetY)
+	{
+		toView(theWin)->onMouseScroll(theOffsetX, theOffsetY);
+	}
+
+	//! Mouse click callback.
+	static void onMouseButtonCallback(GLFWwindow* theWin, int theButton, int theAction, int theMods)
+	{
+		toView(theWin)->onMouseButton(theButton, theAction, theMods);
+	}
+
+	//! Mouse move callback.
+	static void onMouseMoveCallback(GLFWwindow* theWin, double thePosX, double thePosY)
+	{
+		toView(theWin)->onMouseMove((int)thePosX, (int)thePosY);
+	}
+
+	static void onKeyCallback(GLFWwindow* theWin, int key, int scancode, int action, int mod)
+	{
+		toView(theWin)->onKeyCallback(key, scancode, action, mod);
+	}
+
+private:
+
+	Handle(GlfwOcctWindow) myOcctWindow;
+	Handle(V3d_View) myView;
+	Handle(AIS_InteractiveContext) myContext;
+	bool myToWaitEvents = true;
+	std::vector<gp_Pnt> myPath;
 };
 
 #endif // _GlfwOcctView_Header
