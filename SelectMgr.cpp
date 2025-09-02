@@ -52,7 +52,7 @@ auto SelectMgr::GetIntersection(int screenX, int screenY, std::vector<Intersecti
     auto selector = selectmgr->Selector();
     selector->Pick(screenX,screenY, m_Viewer->ActiveViews().First());
     Intersection(intersection);
-    selector->ClearPicked();
+    //selector->ClearPicked();
     // auto selectorNb = selector->NbPicked();
     // for (Standard_Integer i = 1; i <= selectorNb; ++i) {
     //     auto data = selector->PickedData(i);
@@ -236,12 +236,18 @@ void SelectMgr::TestForSnap(int mouseX, int mouseY) const {
     if (!m_SnapSystem)
         return;
     std::vector<IntersectionResult> intersections;
-    GetIntersection(mouseX,mouseY,intersections);
+    GetIntersection(intersections);
     PrintResult(intersections);
     gp_Ax1 ray;
     GenerateRayFromMousePos(mouseX,mouseY,ray);
     gp_Pnt snapPoint;
     SnapTypes snapType;
+    m_SnapSystem->SetMousePosition(gp_XY(mouseX, mouseY));
+    {
+        std::vector<IntersectionResult> intersections;
+        GetIntersection(intersections);
+        PrintResult(intersections);
+    }
     if (!intersections.empty()) {
         auto ints = intersections.front();
         TopoDS_Shape shape=Handle(AIS_Shape)::DownCast(ints.Object)->Shape();
@@ -309,6 +315,7 @@ void SelectMgr::SetShapeId(std::string Id, opencascade::handle<AIS_Shape> shape)
 }
 
 void SelectMgr::PrintResult(const std::vector<IntersectionResult> &intersection) const {
+    return;
     if (intersection.empty()) {
         std::cout << "未与任何模型相交" << std::endl;
         m_Context->ClearSelected(Standard_True);  // 清除选择状态

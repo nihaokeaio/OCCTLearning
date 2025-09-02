@@ -80,6 +80,8 @@ private:
 
     void SetShapeId(const std::string& Id,Handle(AIS_Shape) aisShape);
 
+    // 创建指定数量的随机模型
+    void CreateRandomModels(Standard_Integer count, Standard_Real range = 1000.0) const;
 private:
     //! Window resize event.
     void onResize(int theWidth, int theHeight);

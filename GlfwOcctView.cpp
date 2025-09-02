@@ -48,6 +48,7 @@
 #include <TDF_Label.hxx>
 #include <TDataStd_Name.hxx>
 #include <TPrsStd_AISPresentation.hxx>
+#include <BRepPrimAPI_MakeSphere.hxx>
 
 #include <iostream>
 
@@ -201,13 +202,14 @@ void GlfwOcctView::initViewer()
     aViewer->SetDefaultLights();
     aViewer->SetLightOn();
     aViewer->SetDefaultTypeOfView(V3d_PERSPECTIVE);
-    //aViewer->ActivateGrid(Aspect_GT_Rectangular, Aspect_GDM_Lines);
+    aViewer->ActivateGrid(Aspect_GT_Rectangular, Aspect_GDM_Lines);
     myView = aViewer->CreateView();
     //myView->SetImmediateUpdate(Standard_False);
     myView->SetWindow(myOcctWindow, myOcctWindow->NativeGlContext());
     myView->ChangeRenderingParams().ToShowStats = Standard_True;
 
     myContext = new AIS_InteractiveContext(aViewer);
+    myContext->MainSelector()->AllowOverlapDetection(Standard_True);
 
     Handle(AIS_ViewCube) aCube = new AIS_ViewCube();
     aCube->SetSize(55);
@@ -348,6 +350,8 @@ void GlfwOcctView::initDemoScene()
         myContext->Display(aisEdge, AIS_Shaded, 0, false);
     }
 
+    CreateRandomModels(500,1000);
+
     TCollection_AsciiString aGlInfo; {
         TColStd_IndexedDataMapOfStringString aRendInfo;
         myView->DiagnosticInformation(aRendInfo, Graphic3d_DiagnosticInfo_Basic);
@@ -456,6 +460,44 @@ void GlfwOcctView::ComputeRayFromScreenPos(int x, int y, gp_Pnt &rayOrigin, gp_D
 
 void GlfwOcctView::SetShapeId(const std::string &Id, opencascade::handle<AIS_Shape> aisShape) {
     SelectMgr::Instance().SetShapeId(Id,aisShape);;
+}
+
+void GlfwOcctView::CreateRandomModels(Standard_Integer count, Standard_Real range) const {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> disPos(-range/2, range/2);
+    std::uniform_real_distribution<> disSize(10, 50);
+    std::uniform_int_distribution<> disType(0, 2); // 0:立方体, 1:圆柱体, 2:球体
+
+    for (Standard_Integer i = 0; i < count; ++i) {
+        // 随机位置
+        gp_Pnt pos(disPos(gen), disPos(gen), disPos(gen));
+
+        // 随机尺寸
+        Standard_Real size = disSize(gen);
+
+        // 随机类型
+        TopoDS_Shape shape;
+        switch (disType(gen)) {
+            case 0: // 立方体
+                shape = BRepPrimAPI_MakeBox(pos, size, size, size).Shape();
+                break;
+            case 1: // 圆柱体
+                shape = BRepPrimAPI_MakeCylinder(gp_Ax2(pos, gp_Dir(0, 0, 1)), size/2, size).Shape();
+                break;
+            case 2: // 球体
+                shape = BRepPrimAPI_MakeSphere(pos, size/2).Shape();
+                break;
+        }
+
+        // 创建并显示AIS对象
+        Handle(AIS_Shape) aisShape = new AIS_Shape(shape);
+        //aisShape->SetColor(Quantity_NOC_BLUE);
+        myContext->Display(aisShape, AIS_Shaded, 0,false);
+    }
+
+    myView->FitAll();
+    std::cout << "已创建 " << count << " 个随机模型" << std::endl;
 }
 
 // ================================================================

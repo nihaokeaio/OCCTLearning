@@ -7,6 +7,7 @@
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Line.hxx>
 #include <AIS_Point.hxx>
+#include <AIS_Shape.hxx>
 #include <Standard_Handle.hxx>
 
 #include "SnapTypes.h"
@@ -26,6 +27,7 @@ public:
     // 设置当前视图（用于坐标转换）
     void SetCurrentView(const Handle(V3d_View)& view);
 
+    void SetMousePosition(gp_XY mousePos);
     // 执行吸附操作
     // hasHit: 是否有射线与物体的交点
     // hitShape: 命中的形状（hasHit为true时有效）
@@ -93,6 +95,7 @@ private:
     // 绘制吸附反馈
     void VisualizeSnap(const gp_Pnt& snapPoint, SnapTypes type);
 
+    void VisualizeSnapRect();
     // 从AIS对象获取拓扑形状
     static TopoDS_Shape GetShapeFromAIS(const Handle(AIS_InteractiveObject)& aisObj);
 
@@ -107,7 +110,9 @@ private:
     Standard_Boolean myVisualizationEnabled;
     Handle(AIS_Point) mySnapMarker;
     Handle(AIS_Line) mySnapLine;
-
+    Handle(AIS_Shape) myToleranceShape;
+    gp_XY myMousePosition;
+    int snapToleranceRange;
 };
 
 

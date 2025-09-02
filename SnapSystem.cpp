@@ -13,6 +13,7 @@
 #include <Geom_Line.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
 
 SnapSystem::SnapSystem(const opencascade::handle<AIS_InteractiveContext> &context): mySnapRadius(5),
                                                                                     myVisualizationEnabled(true) {
@@ -26,6 +27,14 @@ SnapSystem::SnapSystem(const opencascade::handle<AIS_InteractiveContext> &contex
     mySnapLine = new AIS_Line(geomLine);
     mySnapLine->SetColor(Quantity_NOC_YELLOW);
     mySnapLine->SetWidth(1);
+
+    TopoDS_Shape shap;
+    myToleranceShape = new AIS_Shape(shap);
+    myToleranceShape->SetColor(Quantity_NOC_YELLOW);  // 黄色矩形，醒目且不刺眼
+    myToleranceShape->SetTransparency(0.7);  // 半透明，不遮挡场景
+    myContext->Display(myToleranceShape,  AIS_WireFrame,-1,  Standard_False);  // 初始不显示
+
+    snapToleranceRange=15;
 }
 
 void SnapSystem::SetSnapRadius(Standard_Real radius) {
@@ -58,9 +67,14 @@ void SnapSystem::SetCurrentView(const Handle(V3d_View)& view)
     myCurrentView = view;
 }
 
+void SnapSystem::SetMousePosition(gp_XY mousePos) {
+    myMousePosition=mousePos;
+}
+
 Standard_Boolean SnapSystem::Snap(Standard_Boolean hasHit, const TopoDS_Shape &hitShape, const gp_Pnt &hitPoint,
-    const gp_Lin &pickRay, gp_Pnt &snapPoint, SnapTypes &snapType) {
+                                  const gp_Lin &pickRay, gp_Pnt &snapPoint, SnapTypes &snapType) {
     myFeatures.Clear();
+    VisualizeSnapRect();
     bool isSnap=SnapToDiscreteFeature(hasHit,hitShape,hitPoint,pickRay,snapPoint,snapType);
     if (isSnap)
         return true;
@@ -197,8 +211,10 @@ void SnapSystem::ClearVisualization() {
     {
         myContext->Erase(mySnapMarker, true);
         myContext->Erase(mySnapLine, true);
+        myContext->Erase(myToleranceShape, true);
         myContext->Remove(mySnapMarker, true);
         myContext->Remove(mySnapLine, true);
+        myContext->Remove(myToleranceShape, true);
     }
 }
 
@@ -345,14 +361,33 @@ NCollection_Sequence<opencascade::handle<AIS_InteractiveObject>> SnapSystem::Get
 
     if (myContext.IsNull())
         return result;
+    auto selectmgr = myContext->SelectionManager();
+    auto selector = selectmgr->Selector();
+    selector->Clear();
+    myContext->SelectDetected();
+    //{
+    //    std::vector<Handle(AIS_Shape)>shapes;
+    //    NCollection_List<Handle(SelectMgr_EntityOwner)> theOwners;
+    //    selector->ActiveOwners(theOwners);
+    //    for (auto theOwner : theOwners) {
+    //        Handle(AIS_Shape) shape = Handle(AIS_Shape)::DownCast(theOwner->Selectable());
+    //        shapes.push_back(shape);
+    //    }
+    //}
 
+
+    selector->Pick(myMousePosition.X()-snapToleranceRange,myMousePosition.Y()-snapToleranceRange,myMousePosition.X()+snapToleranceRange,
+        myMousePosition.Y()+snapToleranceRange,myCurrentView);
+    auto selectorNb = selector->NbPicked();
     AIS_ListOfInteractive intObjects;
-    myContext->ObjectsInside(intObjects,AIS_KindOfInteractive_Shape);
-    // 遍历交互上下文中的所有对象
-    for (const auto& obj : intObjects) {
-        if (myContext->IsDisplayed(obj) && IsObjectSnapEnabled(obj))
-        {
-            result.Append(obj);
+    for (Standard_Integer i = 1; i <= selectorNb; ++i) {
+        auto data = selector->PickedData(i);
+        auto owner = data.Entity->OwnerId();
+        if (owner.IsNull())
+            continue;
+        Handle(AIS_Shape) shape = Handle(AIS_Shape)::DownCast(owner->Selectable());
+        if (!shape.IsNull()) {
+            result.Append(shape);
         }
     }
     return result;
@@ -392,6 +427,36 @@ void SnapSystem::VisualizeSnap(const gp_Pnt &snapPoint, SnapTypes type) {
 
     myContext->Display(mySnapMarker, Standard_True);
     //myCurrentView->Redraw();
+}
+
+void SnapSystem::VisualizeSnapRect() {
+    // 获取视图和相机信息
+    return;
+    auto view= myCurrentView;
+    Handle(Graphic3d_Camera) camera = view->Camera();
+    Standard_Integer viewWidth,viewHeight;
+    view->Window()->Size(viewWidth,viewHeight);
+    gp_XY tolerance(5,5);
+    auto GetNDCPos=[&](gp_XY mousePos){
+        // 将屏幕坐标标准化到[-1, 1]范围
+        Standard_Real nx = (2.0 * mousePos.X()) / viewWidth - 1.0;
+        Standard_Real ny = 1.0 - (2.0 * mousePos.Y()) / viewHeight; // Y轴反转，因为屏幕Y向下
+        auto worldPoint= view->Camera()->UnProject(gp_Pnt(nx,ny,-1));
+        return worldPoint;
+    };
+    auto mouseWorld=GetNDCPos(myMousePosition);
+    gp_Pln mousePlane(mouseWorld,-camera->Direction());
+    // auto leftTop=GetNDCPos(myMousePosition-tolerance);
+    // auto rightTop=GetNDCPos(myMousePosition+gp_XY( tolerance.X(),-tolerance.Y()));
+    // auto leftBottom=GetNDCPos(myMousePosition+gp_XY( -tolerance.X(),tolerance.Y()));
+    // auto rightBottom=GetNDCPos(myMousePosition+gp_XY( tolerance.X(),tolerance.Y()));
+    BRepBuilderAPI_MakeFace faceBuilder(mousePlane,-tolerance.X(),tolerance.X(),tolerance.Y(),-tolerance.Y());
+    if (faceBuilder.IsDone()) {
+        myToleranceShape->SetShape(faceBuilder.Shape());
+        // 更新显示
+        myContext->Display(myToleranceShape, AIS_WireFrame,0, Standard_True);
+    }
+
 }
 
 TopoDS_Shape SnapSystem::GetShapeFromAIS(const opencascade::handle<AIS_InteractiveObject> &aisObj) {
