@@ -49,12 +49,19 @@
 #include <TDataStd_Name.hxx>
 #include <TPrsStd_AISPresentation.hxx>
 #include <BRepPrimAPI_MakeSphere.hxx>
+#include <Geom_CartesianPoint.hxx>
+#include <Prs3d_PointAspect.hxx>
 
 #include <iostream>
+#include <ranges>
 
 #include <GLFW/glfw3.h>
 
+#include "FeatureExtractor.h"
+#include "FeatureExtractor.h"
+#include "POI_Data_Point.h"
 #include "SelectMgr.h"
+#include "Timer.h"
 
 namespace
 {
@@ -98,8 +105,7 @@ namespace
 // Function : GlfwOcctView
 // Purpose  :
 // ================================================================
-GlfwOcctView::GlfwOcctView()
-{
+GlfwOcctView::GlfwOcctView() {
 }
 
 // ================================================================
@@ -222,6 +228,8 @@ void GlfwOcctView::initViewer()
 
     SelectMgr::Instance().SetInteractiveContext(myContext);
     SelectMgr::Instance().SetViewer(aViewer);
+
+    myPOIBvhTree=std::make_unique<POI_BVHTreeDebugger<3, size_t>>(myContext.get(),myView.get());
 }
 
 void GlfwOcctView::initGui()
@@ -254,9 +262,16 @@ void GlfwOcctView::renderGui()
     ImGui::Begin("Hello");
     ImGui::Text("Hello ImGui!");
     ImGui::Text("Hello OpenCASCADE!");
-    ImGui::Button("OK");
+
+    if (ImGui::Button("OK")) {
+        std::cout << "OK" << std::endl;
+    }
     ImGui::SameLine();
     ImGui::Button("Cancel");
+
+    initSnapGUI();
+
+
     ImGui::End();
 
     ImGui::Render();
@@ -264,6 +279,37 @@ void GlfwOcctView::renderGui()
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     glfwSwapBuffers(myOcctWindow->getGlfwWindow());
+}
+
+void GlfwOcctView::initSnapGUI() {
+    ImGui::Begin("Test for Snap");
+    if (ImGui::CollapsingHeader("CreateBVH")) {
+        if (ImGui::Button("BuildBVH")) {
+            std::vector<std::weak_ptr<POI_Data_Point<3,size_t>>>poiDataPoints;
+            std::vector<std::weak_ptr<POI_Data_Segment<3,size_t>>>poiDataSegments;
+            std::vector<std::weak_ptr<POI_Data_Line<3,size_t>>>poiDataLines;
+            for (const auto &pData: myPOIPool | std::views::values) {
+                if (auto pointPtr=std::dynamic_pointer_cast<POI_Data_Point<3,size_t>>(pData)) {
+                    poiDataPoints.emplace_back(std::weak_ptr(pointPtr));
+                }
+                else if (auto segPtr=std::dynamic_pointer_cast<POI_Data_Segment<3,size_t>>(pData)) {
+                    poiDataSegments.emplace_back(std::weak_ptr(segPtr));
+                }
+                else if (auto linePtr=std::dynamic_pointer_cast<POI_Data_Line<3,size_t>>(pData)) {
+                    poiDataLines.emplace_back(std::weak_ptr(linePtr));
+                }
+            }
+            myPOIBvhTree->poiBvhTree.AddPOI_Data_Points(poiDataPoints);
+            myPOIBvhTree->poiBvhTree.AddPOI_Data_Segments(poiDataSegments);
+            myPOIBvhTree->poiBvhTree.AddPOI_Data_Lines(poiDataLines);
+            {
+                Timer t;
+                myPOIBvhTree->BuildBVH();
+                std::cout << "构建BVH=>耗时: " << t.elapsed() << " 毫秒" << std::endl;
+            }
+        }
+    }
+    ImGui::End();
 }
 
 // ================================================================
@@ -286,71 +332,73 @@ void GlfwOcctView::initDemoScene()
     aBox->SetTransparency(0.6);
     SetShapeId("aBox",aBox);
     myContext->Display(aBox, AIS_Shaded, 0, false);
-    anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
-    Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
-    SetShapeId("aCone",aCone);
-    myContext->Display(aCone, AIS_WireFrame, 0, false); {
-        // 参数说明：主半径（圆环中心到管子中心），管子半径
-        Standard_Real majorRadius = 5.0; // 圆环主半径
-        Standard_Real minorRadius = 3.0; // 圆环截面半径
+    // anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
+    // Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
+    // SetShapeId("aCone",aCone);
+    // myContext->Display(aCone, AIS_WireFrame, 0, false); {
+    //     // 参数说明：主半径（圆环中心到管子中心），管子半径
+    //     Standard_Real majorRadius = 5.0; // 圆环主半径
+    //     Standard_Real minorRadius = 3.0; // 圆环截面半径
+    //
+    //     // 创建圆环
+    //     TopoDS_Shape torus = BRepPrimAPI_MakeTorus(majorRadius, minorRadius).Shape();
+    //     // 2. 配置离散参数（提高精度）
+    //     IMeshTools_Parameters meshParams;
+    //     meshParams.Deflection = minorRadius * 0.01; // 最大偏差（越小精度越高，建议 0.01~0.1）
+    //     meshParams.Angle = 0.5; // 角度公差（弧度，越小三角形越多，建议 0.5~2.0）
+    //     BRepMesh_IncrementalMesh mesher(torus, meshParams);
+    //
+    //     // 3. 确保离散成功
+    //     if (!mesher.IsDone()) {
+    //         // 处理离散失败（如检查参数是否合理）
+    //     }
+    //
+    //     gp_Trsf mat;
+    //     mat.SetTranslation(gp_Vec(100, 100, 100));
+    //     torus.Move(mat);
+    //     static bool isExport = true;
+    //     if (!isExport) {
+    //         ExportMeshData(torus, R""(C:\Users\ZQD\Desktop\data\torus.obj)"");
+    //     }
+    //     // 显示或进一步操作
+    //     Handle(AIS_Shape) aisTorus = new AIS_Shape(torus);
+    //     aisTorus->SetTransparency(0.3); // 可选：设置半透明
+    //     SetShapeId("aisTorus",aisTorus);
+    //     myContext->Display(aisTorus, AIS_Shaded, 0, false);
+    // } {
+    //     auto origin = gp_Pnt{100, 0, 0};
+    //     auto direction = gp_Dir{0, 0, 1};
+    //     // 创建圆柱（箭头杆）
+    //     gp_Ax2 shaftAxis(origin, direction); // 轴系：原点+方向
+    //
+    //     BRepPrimAPI_MakeCylinder cylinderMaker(shaftAxis, 6 / 2, 100);
+    //     if (!cylinderMaker.IsDone()) {
+    //         int x = 1;
+    //         //Standard_Failure::Raise("创建圆柱失败");
+    //     }
+    //     Handle(AIS_Shape) aRevolution = new AIS_Shape(cylinderMaker.Shape());
+    //     aRevolution->SetTransparency(0.6);
+    //     SetShapeId("aRevolution",aRevolution);
+    //     myContext->Display(aRevolution, AIS_Shaded, 0, false);
+    // }
+    // //创建线段
+    // {
+    //     // 定义线段的起点和终点
+    //     gp_Pnt P1(0.0, 0.0, 0.0); // 起点 (x,y,z)
+    //     gp_Pnt P2(-100.0, -50.0, 50.0); // 终点
+    //
+    //     // 创建线段
+    //     TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(P1, P2).Edge();
+    //
+    //     // 可视化（可选）
+    //     Handle(AIS_Shape) aisEdge = new AIS_Shape(edge);
+    //     SetShapeId("aisEdge",aisEdge);
+    //     myContext->Display(aisEdge, AIS_Shaded, 0, false);
+    // }
 
-        // 创建圆环
-        TopoDS_Shape torus = BRepPrimAPI_MakeTorus(majorRadius, minorRadius).Shape();
-        // 2. 配置离散参数（提高精度）
-        IMeshTools_Parameters meshParams;
-        meshParams.Deflection = minorRadius * 0.01; // 最大偏差（越小精度越高，建议 0.01~0.1）
-        meshParams.Angle = 0.5; // 角度公差（弧度，越小三角形越多，建议 0.5~2.0）
-        BRepMesh_IncrementalMesh mesher(torus, meshParams);
-
-        // 3. 确保离散成功
-        if (!mesher.IsDone()) {
-            // 处理离散失败（如检查参数是否合理）
-        }
-
-        gp_Trsf mat;
-        mat.SetTranslation(gp_Vec(100, 100, 100));
-        torus.Move(mat);
-        static bool isExport = true;
-        if (!isExport) {
-            ExportMeshData(torus, R""(C:\Users\ZQD\Desktop\data\torus.obj)"");
-        }
-        // 显示或进一步操作
-        Handle(AIS_Shape) aisTorus = new AIS_Shape(torus);
-        aisTorus->SetTransparency(0.3); // 可选：设置半透明
-        SetShapeId("aisTorus",aisTorus);
-        myContext->Display(aisTorus, AIS_Shaded, 0, false);
-    } {
-        auto origin = gp_Pnt{100, 0, 0};
-        auto direction = gp_Dir{0, 0, 1};
-        // 创建圆柱（箭头杆）
-        gp_Ax2 shaftAxis(origin, direction); // 轴系：原点+方向
-
-        BRepPrimAPI_MakeCylinder cylinderMaker(shaftAxis, 6 / 2, 100);
-        if (!cylinderMaker.IsDone()) {
-            int x = 1;
-            //Standard_Failure::Raise("创建圆柱失败");
-        }
-        Handle(AIS_Shape) aRevolution = new AIS_Shape(cylinderMaker.Shape());
-        aRevolution->SetTransparency(0.6);
-        SetShapeId("aRevolution",aRevolution);
-        myContext->Display(aRevolution, AIS_Shaded, 0, false);
-    }
-    //创建线段
-    {
-        // 定义线段的起点和终点
-        gp_Pnt P1(0.0, 0.0, 0.0); // 起点 (x,y,z)
-        gp_Pnt P2(-100.0, -50.0, 50.0); // 终点
-
-        // 创建线段
-        TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(P1, P2).Edge();
-
-        // 可视化（可选）
-        Handle(AIS_Shape) aisEdge = new AIS_Shape(edge);
-        SetShapeId("aisEdge",aisEdge);
-        myContext->Display(aisEdge, AIS_Shaded, 0, false);
-    }
-
-    CreateRandomModels(500,1000);
+    CreateRandomPoints(1000,1000);
+    CreateRandomSegments(100,1000);
+    CreateRandomLines(20,1000);
 
     TCollection_AsciiString aGlInfo; {
         TColStd_IndexedDataMapOfStringString aRendInfo;
@@ -418,51 +466,29 @@ void GlfwOcctView::ExportMeshData(const TopoDS_Shape &shape, const std::string &
     std::cout << "全局网格数据已导出至：" << filePath << std::endl;
 }
 
-void GlfwOcctView::ComputeRayFromScreenPos(int x, int y, gp_Pnt &rayOrigin, gp_Dir &rayDir) const {
+void GlfwOcctView::ComputeRayFromScreenPos(int x, int y, gp_Lin& ray) const {
     // 获取视图和相机信息
-    Handle(Graphic3d_Camera) camera = myView->Camera();
+    auto view= myView;
+    Handle(Graphic3d_Camera) camera = view->Camera();
     Standard_Integer viewWidth,viewHeight;
-    myView->Window()->Size(viewWidth,viewHeight);
+    view->Window()->Size(viewWidth,viewHeight);
 
     // 将屏幕坐标标准化到[-1, 1]范围
     Standard_Real nx = (2.0 * x) / viewWidth - 1.0;
     Standard_Real ny = 1.0 - (2.0 * y) / viewHeight; // Y轴反转，因为屏幕Y向下
 
-    // 获取相机参数
-    gp_Pnt eye = camera->Eye();
-    gp_Pnt center = camera->Center();
-    gp_Dir viewDir = (center.XYZ() - eye.XYZ()).Normalized();
-
-
-    gp_Dir upDir = camera->Up();
-    gp_Dir rightDir = viewDir.Crossed(upDir).XYZ().Normalized();
-
-    // 计算视场角相关参数
-    Standard_Real fovy = camera->FOVy();
-    Standard_Real aspect = viewWidth / viewHeight;
-    Standard_Real tanFovy = tan(fovy / 2.0);
-
-    // 计算射线在相机坐标系中的方向
-    gp_Dir localDir(
-        nx * aspect * tanFovy,
-        ny * tanFovy,
-        1.0
-    );
-
-    // 转换到世界坐标系
-    rayOrigin = eye;
-    rayDir = gp_Dir(
-        localDir.X() * rightDir.X() + localDir.Y() * upDir.X() + localDir.Z() * viewDir.X(),
-        localDir.X() * rightDir.Y() + localDir.Y() * upDir.Y() + localDir.Z() * viewDir.Y(),
-        localDir.X() * rightDir.Z() + localDir.Y() * upDir.Z() + localDir.Z() * viewDir.Z()
-    );
+    auto worldPoint= view->Camera()->UnProject(gp_Pnt(nx,ny,-1));
+    gp_Pnt cameraEye = camera->Eye();
+    gp_Dir mouseDir=gp_Dir( worldPoint.XYZ()-cameraEye.XYZ());
+    ray.SetDirection(mouseDir);
+    ray.SetLocation(cameraEye);
 }
 
 void GlfwOcctView::SetShapeId(const std::string &Id, opencascade::handle<AIS_Shape> aisShape) {
     SelectMgr::Instance().SetShapeId(Id,aisShape);;
 }
 
-void GlfwOcctView::CreateRandomModels(Standard_Integer count, Standard_Real range) const {
+void GlfwOcctView::CreateRandomModels(Standard_Integer count, Standard_Real range){
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> disPos(-range/2, range/2);
@@ -489,7 +515,6 @@ void GlfwOcctView::CreateRandomModels(Standard_Integer count, Standard_Real rang
                 shape = BRepPrimAPI_MakeSphere(pos, size/2).Shape();
                 break;
         }
-
         // 创建并显示AIS对象
         Handle(AIS_Shape) aisShape = new AIS_Shape(shape);
         //aisShape->SetColor(Quantity_NOC_BLUE);
@@ -498,6 +523,127 @@ void GlfwOcctView::CreateRandomModels(Standard_Integer count, Standard_Real rang
 
     myView->FitAll();
     std::cout << "已创建 " << count << " 个随机模型" << std::endl;
+}
+
+auto GlfwOcctView::CreateRandomPoints(Standard_Integer count, Standard_Real range) -> void {
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> disPos(-range/2, range/2);
+    std::uniform_real_distribution<> disSize(10, 50);
+    std::uniform_int_distribution<> disType(0, 2); // 0:立方体, 1:圆柱体, 2:球体
+
+    UniqueIDGenerator uniqueIdGenerator;
+    // 2. 创建属性容器（Prs3d_Drawer）
+    Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
+    // 3. 获取点的专属属性对象（Prs3d_PointAspect）
+    Handle(Prs3d_PointAspect) pointAspect = new Prs3d_PointAspect(Aspect_TOM_O_POINT,Quantity_NOC_GREEN,1);
+    drawer->SetPointAspect(pointAspect);
+
+    for (Standard_Integer i = 0; i < count; ++i) {
+        // 随机位置
+        gp_Pnt pos(disPos(gen), disPos(gen), disPos(gen));
+
+        Handle(Geom_CartesianPoint) gemoPoint= new Geom_CartesianPoint(pos);
+        Handle(AIS_Point) ais_point = new AIS_Point(gemoPoint);  // 直接传入几何点 gp_Pnt
+
+        ais_point->SetAttributes(drawer);
+        myContext->Display(ais_point,false);
+        {
+            using namespace bvh::v2;
+            auto poiDataPointPostion=Vec<double,3>(pos.X(),pos.Y(),pos.Z());
+            auto poiDataPoint=std::make_shared<POI_Data_Point<3,size_t>>(poiDataPointPostion,15);
+            Element element(uniqueIdGenerator.generate());
+            poiDataPoint->SetDataSource(element.GetId());
+            myPOIPool.insert({element,poiDataPoint});
+        }
+    }
+
+}
+
+void GlfwOcctView::CreateRandomSegments(Standard_Integer count, Standard_Real range) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> disPos(-range/2, range/2);
+    std::uniform_real_distribution<> disSize(10, 50);
+    std::uniform_int_distribution<> disType(0, 2); // 0:立方体, 1:圆柱体, 2:球体
+
+    UniqueIDGenerator uniqueIdGenerator;
+    // 2. 创建属性容器（Prs3d_Drawer）
+    Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
+    // 3. 获取点的专属属性对象（Prs3d_PointAspect）
+    Handle(Prs3d_LineAspect) lineAspect = new Prs3d_LineAspect(Quantity_NOC_BLUE,Aspect_TypeOfLine::Aspect_TOL_DOT, 1);
+    drawer->SetLineAspect(lineAspect);
+
+    for (Standard_Integer i = 0; i < count; ++i) {
+
+        //创建线段
+        // 定义线段的起点和终点
+        // 随机位置
+        gp_Pnt P1(disPos(gen), disPos(gen), disPos(gen));
+        gp_Pnt P2(disPos(gen), disPos(gen), disPos(gen));
+
+        // 创建线段
+        TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(P1, P2).Edge();
+        // 可视化（可选）
+        Handle(AIS_Shape) aisEdge = new AIS_Shape(edge);
+        aisEdge->SetAttributes(drawer);
+        myContext->Display(aisEdge, AIS_Shaded, 0, false);
+
+        {
+            using namespace bvh::v2;
+            auto poiDataPointP1=Vec<double,3>(P1.X(),P1.Y(),P1.Z());
+            auto poiDataPointP2=Vec<double,3>(P2.X(),P2.Y(),P2.Z());
+            auto poiDataSeg=std::make_shared<POI_Data_Segment<3,size_t>>(poiDataPointP1,poiDataPointP2,10);
+            Element element(uniqueIdGenerator.generate());
+            poiDataSeg->SetDataSource(element.GetId());
+            myPOIPool.insert({element,poiDataSeg});
+        }
+    }
+}
+
+void GlfwOcctView::CreateRandomLines(Standard_Integer count, Standard_Real range) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> disPos(-range/2, range/2);
+    std::uniform_real_distribution<> disSize(10, 50);
+    std::uniform_int_distribution<> disType(0, 2); // 0:立方体, 1:圆柱体, 2:球体
+
+    UniqueIDGenerator uniqueIdGenerator;
+    // 2. 创建属性容器（Prs3d_Drawer）
+    Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
+    // 3. 获取点的专属属性对象（Prs3d_PointAspect）
+    Handle(Prs3d_LineAspect) lineAspect = new Prs3d_LineAspect(Quantity_NOC_MAGENTA,Aspect_TypeOfLine::Aspect_TOL_DOT, 1);
+    drawer->SetLineAspect(lineAspect);
+
+    for (Standard_Integer i = 0; i < count; ++i) {
+
+        //创建线段
+        // 定义线段的起点和终点
+        // 随机位置
+        gp_Pnt ori(disPos(gen), disPos(gen), disPos(gen));
+        gp_Dir dir(disPos(gen), disPos(gen), disPos(gen));
+
+        gp_Lin lin(ori,dir);
+        // 创建线段
+        // TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(lin).Edge();
+        // // 可视化（可选）
+        // Handle(AIS_Shape) aisEdge = new AIS_Shape(edge);
+        Handle(Geom_Line) line=new Geom_Line(lin);
+        Handle(AIS_Line) aisLine=new AIS_Line(line);
+        aisLine->SetAttributes(drawer);
+        myContext->Display(aisLine, false);
+
+        {
+            using namespace bvh::v2;
+            auto poiDataPointOri=Vec<double,3>(ori.X(),ori.Y(),ori.Z());
+            auto poiDataPointDir=Vec<double,3>(dir.X(),dir.Y(),dir.Z());
+            auto poiDataLine=std::make_shared<POI_Data_Line<3,size_t>>(poiDataPointOri,poiDataPointDir,10);
+            Element element(uniqueIdGenerator.generate());
+            poiDataLine->SetDataSource(element.GetId());
+            myPOIPool.insert({element,poiDataLine});
+        }
+    }
 }
 
 // ================================================================
@@ -598,12 +744,20 @@ void GlfwOcctView::onMouseButton(int theButton, int theAction, int theMods)
     if (theAction == GLFW_PRESS)
     {
         PressMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
-        // gp_Pnt rayOrigin;
-        // gp_Dir rayDirection;
-        // ComputeRayFromScreenPos(aPos.x(),aPos.y(),rayOrigin,rayDirection);
+        gp_Lin ray;
+        ComputeRayFromScreenPos(aPos.x(),aPos.y(),ray);
         // SelectMgr::Instance().SetScreenMousePos(aPos.x(),aPos.y());
         // SelectMgr::Instance().GetHitPoint(rayOrigin, rayDirection);
-        SelectMgr::Instance().Test(aPos.x(),aPos.y());
+        //SelectMgr::Instance().Test(aPos.x(),aPos.y());
+        auto intersects =  myPOIBvhTree->IntersectRay(ray);
+        for (const auto& [elementId, ints]:intersects) {
+            const auto [ok,point0,point1,pari,dataSemantic,dataSource,snapType]=ints;
+            std::cout<<"ElementId = "<<dataSource<<std::endl;
+            std::cout << "point0: (" << point0[0] << ", "
+                  << point0[1] << ", " << point0[2]<< ")" << std::endl;
+            std::cout << "point1: (" << point1[0] << ", "
+                  << point1[1] << ", " << point1[2]<< ")" << std::endl;
+        }
     }
     else {
         ReleaseMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
@@ -635,6 +789,6 @@ void GlfwOcctView::onMouseMove(int thePosX, int thePosY)
         // ComputeRayFromScreenPos(aNewPos.x(),aNewPos.y(),rayOrigin,rayDirection);
         // SelectMgr::Instance().SetScreenMousePos(aNewPos.x(),aNewPos.y());
         // SelectMgr::Instance().GetHitPoint(rayOrigin, rayDirection);
-        SelectMgr::Instance().TestForSnap(aNewPos.x(), aNewPos.y());
+        //SelectMgr::Instance().TestForSnap(aNewPos.x(), aNewPos.y());
     }
 }

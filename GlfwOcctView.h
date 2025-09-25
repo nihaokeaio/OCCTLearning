@@ -28,8 +28,12 @@
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_ViewController.hxx>
 #include <map>
+#include <unordered_map>
 #include <V3d_View.hxx>
 
+#include "Element.h"
+#include "POI_BVHTreeDebugger.h"
+#include "POI_Data.h"
 class AIS_Shape;
 
 //! Sample class creating 3D Viewer within GLFW window.
@@ -59,6 +63,8 @@ private:
     //! Render ImGUI.
     void renderGui();
 
+    void initSnapGUI();
+
     //! Fill 3D Viewer with a DEMO items.
     void initDemoScene();
 
@@ -76,12 +82,21 @@ private:
     void ExportMeshData(const TopoDS_Shape& shape, const std::string& filePath);
 
     // 从屏幕坐标计算射线（适配OCCT 7.9.1）
-    void ComputeRayFromScreenPos(int x, int y, gp_Pnt& rayOrigin, gp_Dir& rayDir) const;
+    void ComputeRayFromScreenPos(int x, int y, gp_Lin& ray) const;
 
     void SetShapeId(const std::string& Id,Handle(AIS_Shape) aisShape);
 
     // 创建指定数量的随机模型
-    void CreateRandomModels(Standard_Integer count, Standard_Real range = 1000.0) const;
+    void CreateRandomModels(Standard_Integer count, Standard_Real range = 1000.0);
+
+    //创建点模型
+    void CreateRandomPoints(Standard_Integer count, Standard_Real range = 5);
+
+    //创建线段模型
+    void CreateRandomSegments(Standard_Integer count, Standard_Real range = 5);
+
+    //创建线段模型
+    void CreateRandomLines(Standard_Integer count, Standard_Real range = 5);
 private:
     //! Window resize event.
     void onResize(int theWidth, int theHeight);
@@ -141,6 +156,9 @@ private:
     Handle(AIS_InteractiveContext) myContext;
     bool myToWaitEvents = true;
 
+    std::unordered_map<Element,std::shared_ptr<POI_Data_Base>> myPOIPool;
+
+    std::unique_ptr<POI_BVHTreeDebugger<>> myPOIBvhTree;
 };
 
 #endif // _GlfwOcctView_Header
