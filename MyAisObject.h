@@ -16,9 +16,9 @@ public:
     ~MyAisObject() override =default;
 
     //! Returns the3D View.
-protected:
+public:
     void Compute(const opencascade::handle<PrsMgr_PresentationManager>& thePrsMgr,
-        const opencascade::handle<Prs3d_Presentation>& thePrs, const Standard_Integer theMode) override;
+                 const opencascade::handle<Prs3d_Presentation>& thePrs, const Standard_Integer theMode) override;
 
 public:
     void ComputeSelection(const opencascade::handle<SelectMgr_Selection>& theSelection,
