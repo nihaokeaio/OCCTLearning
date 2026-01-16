@@ -126,6 +126,7 @@ private:
 
     Handle(GlfwOcctWindow) myOcctWindow;
     Handle(V3d_View) myView;
+    Handle(Graphic3d_ShaderProgram) m_Program;
     Handle(AIS_InteractiveContext) myContext;
     bool myToWaitEvents = true;
 

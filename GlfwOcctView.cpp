@@ -40,6 +40,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include "Timer.h"
+
 namespace
 {
     //! Convert GLFW mouse button into Aspect_VKeyMouse.
@@ -262,7 +264,61 @@ void GlfwOcctView::initDemoScene()
     gp_Ax2 anAxis;
     anAxis.SetLocation(gp_Pnt(0.0, 0.0, 0.0));
     Handle(AIS_Shape) aBox = new AIS_Shape(BRepPrimAPI_MakeBox(anAxis, 50, 50, 50).Shape());
+
+    Handle(Graphic3d_Texture2D) texColor0 = new Graphic3d_Texture2D(
+        R""(C:\Users\ZQD\Desktop\workNote\wallPaper\girl.png)"");
+
+    Handle(Graphic3d_Texture2D) texColor1 = new Graphic3d_Texture2D(
+        R""(C:\Users\ZQD\Desktop\workNote\wallPaper\yang.png)"");
+
+    Handle(Graphic3d_TextureParams) params0 = texColor0->GetParams();
+    params0->SetTextureUnit(Graphic3d_TextureUnit_0);
+    params0->SetModulate(false); ///false，直接使用纹理
+    params0->SetFilter(Graphic3d_TOTF_BILINEAR); ///多级渐远纹理
+    params0->SetAnisoFilter(Graphic3d_LOTA_QUALITY); ///各向异性过滤
+
+    Handle(Graphic3d_TextureParams) params1 = texColor1->GetParams();
+    params1->SetTextureUnit(Graphic3d_TextureUnit_1);
+    params1->SetModulate(true); ///false，直接使用纹理
+    params1->SetFilter(Graphic3d_TOTF_BILINEAR); ///多级渐远纹理
+    params1->SetAnisoFilter(Graphic3d_LOTA_QUALITY); ///各向异性过滤
+
+    ///添加纹理集合
+    auto textureSet = new Graphic3d_TextureSet(2);
+    textureSet->SetValue(0, texColor0);
+    textureSet->SetValue(1, texColor1);
+
+    Handle(Prs3d_Drawer) aBoxDrawer = new Prs3d_Drawer();
+    aBoxDrawer->SetupOwnShadingAspect(); ///需要主动创建
+    aBox->SetAttributes(aBoxDrawer);
+    Handle(Graphic3d_AspectFillArea3d) aspect = aBox->Attributes()->ShadingAspect()->Aspect();
+    aspect->SetTextureSet(textureSet);
+    aspect->SetTextureMapOn();
+    aspect->SetShadingModel(Graphic3d_TOSM_DEFAULT);
+
+
+    m_Program = new Graphic3d_ShaderProgram();
+    auto shaderObjectV = Graphic3d_ShaderObject::CreateFromFile(Graphic3d_TOS_VERTEX,
+                                                                R""(C:\Tools\OcctImgui\texture.vert)"");
+    auto shaderObjectF = Graphic3d_ShaderObject::CreateFromFile(Graphic3d_TOS_FRAGMENT,
+                                                                R""(C:\Tools\OcctImgui\texture.frag)"");
+    m_Program->AttachShader(shaderObjectV);
+    m_Program->AttachShader(shaderObjectF);
+    //m_Program->SetDefaultSampler(false);
+
+    m_Program->PushVariableInt("uTex0", 0);
+    m_Program->PushVariableInt("uTex1", 1);
+    //m_Program->SetTextureSetBits(2);
+
+    if (!m_Program->IsDone())
+    {
+        std::cout << "ShaderProgram NOT done!" << std::endl;
+    }
+    aspect->SetShaderProgram(m_Program);
+
     myContext->Display(aBox, AIS_Shaded, 0, false);
+
+
     anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
     Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
     myContext->Display(aCone, AIS_Shaded, 0, false);
@@ -297,6 +353,7 @@ void GlfwOcctView::handleViewRedraw(const Handle(AIS_InteractiveContext)& theCtx
 // ================================================================
 void GlfwOcctView::mainloop()
 {
+    Timer timer;
     while (!glfwWindowShouldClose(myOcctWindow->getGlfwWindow()))
     {
         // glfwPollEvents() for continuous rendering (immediate return if there are no new events)
@@ -316,6 +373,11 @@ void GlfwOcctView::mainloop()
 
             renderGui();
         }
+        if (m_Program)
+        {
+            m_Program->PushVariableFloat("uTime", timer.elapsed());
+        }
+        myView->Redraw();
     }
 }
 
