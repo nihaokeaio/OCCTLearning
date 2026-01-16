@@ -35,6 +35,11 @@
 #include <Message_Messenger.hxx>
 #include <OpenGl_GraphicDriver.hxx>
 #include <TopAbs_ShapeEnum.hxx>
+#include <Geom_Line.hxx>
+#include <Geom_Plane.hxx>
+#include <BRepBUilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
 
 #include <iostream>
 
@@ -259,14 +264,14 @@ void GlfwOcctView::initDemoScene()
 
     myView->TriedronDisplay(Aspect_TOTP_LEFT_LOWER, Quantity_NOC_GOLD, 0.08, V3d_WIREFRAME);
 
-    gp_Ax2 anAxis;
-    anAxis.SetLocation(gp_Pnt(0.0, 0.0, 0.0));
-    Handle(AIS_Shape) aBox = new AIS_Shape(BRepPrimAPI_MakeBox(anAxis, 50, 50, 50).Shape());
-    myContext->Display(aBox, AIS_Shaded, 0, false);
-    anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
-    Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
-    myContext->Display(aCone, AIS_Shaded, 0, false);
-
+    // gp_Ax2 anAxis;
+    // anAxis.SetLocation(gp_Pnt(0.0, 0.0, 0.0));
+    // Handle(AIS_Shape) aBox = new AIS_Shape(BRepPrimAPI_MakeBox(anAxis, 50, 50, 50).Shape());
+    // myContext->Display(aBox, AIS_Shaded, 0, false);
+    // anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
+    // Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
+    // myContext->Display(aCone, AIS_Shaded, 0, false);
+    DoGeometryTest();
     TCollection_AsciiString aGlInfo;
     {
         TColStd_IndexedDataMapOfStringString aRendInfo;
@@ -278,6 +283,50 @@ void GlfwOcctView::initDemoScene()
         }
     }
     Message::DefaultMessenger()->Send(TCollection_AsciiString("OpenGL info:\n") + aGlInfo, Message_Info);
+}
+
+void GlfwOcctView::DoGeometryTest()
+{
+    gp_Pnt p1(0, 0, 0);
+    gp_Pnt p2(10, 0, 0);
+    gp_Pnt p3(10, 20, 0);
+    gp_Pnt p4(0, 20, 0);
+    ///定义四条直线,几何部分
+    Handle(Geom_Curve) c1 = new Geom_Line(p1, gp_Dir(p2.XYZ() - p1.XYZ()));
+    Handle(Geom_Curve) c2 = new Geom_Line(p2, gp_Dir(p3.XYZ() - p2.XYZ()));
+    Handle(Geom_Curve) c3 = new Geom_Line(p3, gp_Dir(p4.XYZ() - p3.XYZ()));
+    Handle(Geom_Curve) c4 = new Geom_Line(p4, gp_Dir(p1.XYZ() - p4.XYZ()));
+    ///创建拓扑层
+    TopoDS_Edge e1 = BRepBuilderAPI_MakeEdge(c1, p1, p2);
+    TopoDS_Edge e2 = BRepBuilderAPI_MakeEdge(c2, p2, p3);
+    TopoDS_Edge e3 = BRepBuilderAPI_MakeEdge(c3, p3, p4);
+
+    TopoDS_Edge e4 = BRepBuilderAPI_MakeEdge(c4, p4, p1);
+    ///围起来
+    BRepBuilderAPI_MakeWire wireBuilder;
+    wireBuilder.Add(e1);
+    wireBuilder.Add(e2);
+    wireBuilder.Add(e3);
+    wireBuilder.Add(e4);
+    TopoDS_Wire wire = wireBuilder.Wire();
+    TopoDS_Face face = BRepBuilderAPI_MakeFace(wire); ///注意，这里返回的是一个拓扑层的face，其引用了一个几何的surface，裁剪了几何的surface
+
+    ///使用 BRep_Tool 拿 Surface
+    Handle(Geom_Surface) surf = BRep_Tool::Surface(face);
+    ///强转类型
+    Handle(Geom_Plane) plane = Handle(Geom_Plane)::DownCast(surf); ///代表一个无穷大的平面
+    auto pln = plane->Pln(); ///数学平面,获得原点和方向
+
+    ///使用 BRep_Tool 拿 curve
+    Standard_Real f, l;
+    Handle(Geom_Curve) c3d = BRep_Tool::Curve(e1, f, l); ///3D空间，c(t)=(t,0,0),t~[f,l]
+
+    Handle(Geom2d_Curve) c2d = BRep_Tool::CurveOnSurface(e1, face, f, l); ///UV空间，注意，它属于面，同一条边会存在于多个面内，u(t)=t,v(t)=0
+
+
+    ///创建AIS_Shape
+    Handle(AIS_Shape) aShape = new AIS_Shape(face);
+    myContext->Display(aShape, AIS_Shaded, 0, false);
 }
 
 // ================================================================

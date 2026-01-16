@@ -59,6 +59,7 @@ private:
     //! Fill 3D Viewer with a DEMO items.
     void initDemoScene();
 
+    void DoGeometryTest();
     //! Application event loop.
     void mainloop();
 
