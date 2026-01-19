@@ -40,6 +40,7 @@
 #include <BRepBUilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepPrimAPI_MakePrism.hxx>
 
 #include <iostream>
 
@@ -323,9 +324,29 @@ void GlfwOcctView::DoGeometryTest()
 
     Handle(Geom2d_Curve) c2d = BRep_Tool::CurveOnSurface(e1, face, f, l); ///UV空间，注意，它属于面，同一条边会存在于多个面内，u(t)=t,v(t)=0
 
+    ///3D空间         c(t)=(x(t),y(t),z(t))
+    ///UV空间         (u(y),v(t))
+    ///Surface        r(u,v)
+    ///因此，满足      c(t)=r(u(t),v(t))
+    for (int i = 0; i <= 5; ++i)
+    {
+        double t = f + (l - f) * i / 5.0;
+
+        gp_Pnt p3d = c3d->Value(t);
+
+        gp_Pnt2d uv = c2d->Value(t);
+        gp_Pnt pFromUV = surf->Value(uv.X(), uv.Y());
+
+        // 比较 p3d 和 pFromUV
+        int x = 1;
+    }
+
+    ///拉升face
+    gp_Vec vec(0, 0, 10);
+    TopoDS_Shape solid = BRepPrimAPI_MakePrism(face, vec);
 
     ///创建AIS_Shape
-    Handle(AIS_Shape) aShape = new AIS_Shape(face);
+    Handle(AIS_Shape) aShape = new AIS_Shape(wire);
     myContext->Display(aShape, AIS_Shaded, 0, false);
 }
 
