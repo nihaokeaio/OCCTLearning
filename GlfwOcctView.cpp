@@ -36,11 +36,20 @@
 #include <OpenGl_GraphicDriver.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <Geom_Line.hxx>
+#include <Geom_BSplineCurve.hxx>
 #include <Geom_Plane.hxx>
+#include <Geom_Circle.hxx>
+#include <Geom_SurfaceOfRevolution.hxx>
+#include <GeomAPI_PointsToBSpline.hxx>
 #include <BRepBUilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
+#include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
+#include <BRepTools.hxx>
 
 #include <iostream>
 
@@ -272,7 +281,8 @@ void GlfwOcctView::initDemoScene()
     // anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
     // Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
     // myContext->Display(aCone, AIS_Shaded, 0, false);
-    DoGeometryTest();
+    DoGeometryBase();
+    DoGeometryCreateBottle();
     TCollection_AsciiString aGlInfo;
     {
         TColStd_IndexedDataMapOfStringString aRendInfo;
@@ -286,7 +296,7 @@ void GlfwOcctView::initDemoScene()
     Message::DefaultMessenger()->Send(TCollection_AsciiString("OpenGL info:\n") + aGlInfo, Message_Info);
 }
 
-void GlfwOcctView::DoGeometryTest()
+void GlfwOcctView::DoGeometryBase()
 {
     gp_Pnt p1(0, 0, 0);
     gp_Pnt p2(10, 0, 0);
@@ -340,13 +350,145 @@ void GlfwOcctView::DoGeometryTest()
         // 比较 p3d 和 pFromUV
         int x = 1;
     }
-
+    ///创建一个曲底面
+    TopoDS_Shape shape;
+    {
+        TColgp_Array1OfPnt pts(1, 6);
+        pts(1) = gp_Pnt(0, 0, 0);
+        pts(2) = gp_Pnt(5, 0, 0);
+        pts(3) = gp_Pnt(6, 4, 0);
+        pts(4) = gp_Pnt(4, 8, 0);
+        pts(5) = gp_Pnt(2, 12, 0);
+        pts(6) = gp_Pnt(0, 15, 0);
+        Handle(Geom_BSplineCurve) profile = GeomAPI_PointsToBSpline(pts).Curve();
+        TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(profile);
+        gp_Vec vec(0, 0, 10);
+        shape = BRepPrimAPI_MakePrism(edge, vec);
+    }
     ///拉升face
-    gp_Vec vec(0, 0, 10);
-    TopoDS_Shape solid = BRepPrimAPI_MakePrism(face, vec);
+    // gp_Vec vec(0, 0, 10);
+    // shape = BRepPrimAPI_MakePrism(face, vec);
 
     ///创建AIS_Shape
-    Handle(AIS_Shape) aShape = new AIS_Shape(wire);
+    Handle(AIS_Shape) aShape = new AIS_Shape(shape);
+    //myContext->Display(aShape, AIS_Shaded, 0, false);
+}
+
+void GlfwOcctView::DoGeometryCreateBottle()
+{
+    TColgp_Array1OfPnt pts(1, 6);
+    pts(1) = gp_Pnt(0, 0, 0);
+    pts(2) = gp_Pnt(5, 0, 0);
+    pts(3) = gp_Pnt(6, 0, 4);
+    pts(4) = gp_Pnt(4, 0, 8);
+    pts(5) = gp_Pnt(2, 0, 12);
+    pts(6) = gp_Pnt(0, 0, 15);
+    Handle(Geom_BSplineCurve) profile = GeomAPI_PointsToBSpline(pts).Curve();
+    TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(profile);
+    gp_Ax1 axis({0, 0, 0}, {0, 0, 1});
+    TopoDS_Shape bottle = BRepPrimAPI_MakeRevol(edge, axis,M_PI_4).Shape();
+
+    std::vector<std::vector<gp_Pnt>> curvePts;
+    TopoDS_Face side;
+    {
+        int nFace = 0, nEdge = 0, nVert = 0;
+
+        for (TopExp_Explorer ex(bottle, TopAbs_FACE); ex.More(); ex.Next()) nFace++;
+        for (TopExp_Explorer ex(bottle, TopAbs_EDGE); ex.More(); ex.Next()) nEdge++;
+        for (TopExp_Explorer ex(bottle, TopAbs_VERTEX); ex.More(); ex.Next()) nVert++;
+
+        std::cout << "Face: " << nFace
+            << " Edge: " << nEdge
+            << " Vertex: " << nVert << std::endl;
+
+
+        for (TopExp_Explorer ex(bottle, TopAbs_FACE); ex.More(); ex.Next())
+        {
+            TopoDS_Face f = TopoDS::Face(ex.Current());
+            Handle(Geom_Surface) s = BRep_Tool::Surface(f);
+            ///Revol 的参数空间是
+            ///S(u,v)=R(u)⋅C(v)
+            ///u:旋转角
+            ///v:轮廓参数
+            if (s->IsKind(STANDARD_TYPE(Geom_SurfaceOfRevolution)))
+            {
+                side = f;
+                Standard_Real u1, u2, v1, v2;
+                BRepTools::UVBounds(side, u1, u2, v1, v2);
+                int x = 1;
+            }
+        }
+        for (TopExp_Explorer ex(side, TopAbs_EDGE); ex.More(); ex.Next())
+        {
+            TopoDS_Edge e = TopoDS::Edge(ex.Current());
+            Standard_Real f, l;
+            Handle(Geom2d_Curve) c = BRep_Tool::CurveOnSurface(e, side, f, l);
+            Handle(Geom_Surface) s = BRep_Tool::Surface(side);
+            // 在参数区间采样
+            std::vector<gp_Pnt> points;
+            int N = 50;
+
+            for (int i = 0; i <= N; ++i)
+            {
+                Standard_Real t = f + (l - f) * i / N;
+
+                gp_Pnt2d uv = c->Value(t);
+                gp_Pnt p3d = s->Value(uv.X(), uv.Y());
+                points.push_back(p3d);
+            }
+            curvePts.push_back(points);
+        }
+    }
+
+    {
+        for (const auto& cPts : curvePts)
+        {
+            ///[0],[1]会退化成点
+            BRepBuilderAPI_MakePolygon poly;
+            for (auto& p : cPts)
+                poly.Add(p);
+            //poly.Close();
+            if (!poly.IsDone())
+            {
+                std::cout << "Polygon not done!" << std::endl;
+                continue;
+            }
+            TopoDS_Wire visEdge = poly.Wire();
+            Handle(AIS_Shape) aShape = new AIS_Shape(visEdge);
+            //myContext->Display(aShape, AIS_WireFrame, 0, false);
+        }
+    }
+    {
+        ///在UV空间中画一条线，看看其映射到3D空间是怎么样的
+        Standard_Real u1, u2, v1, v2;
+        BRepTools::UVBounds(side, u1, u2, v1, v2);
+        Handle(Geom_Surface) surf = BRep_Tool::Surface(side);
+        std::vector<gp_Pnt> somePts;
+        int N = 80;
+        for (int i = 0; i <= N; ++i)
+        {
+            double t = static_cast<double>(i) / N;
+
+            double u = u1 + (u2 - u1) * t;
+            //double u = u1 + (u2 - u1) * 0.5; //一条母线
+            //double v = v1 + (v2 - v1) * 0.5; //一条圆弧
+            double v = v1 + (v2 - v1) * t;
+            gp_Pnt p = surf->Value(u, v);
+            somePts.push_back(p);
+        }
+        BRepBuilderAPI_MakePolygon poly;
+        for (auto& p : somePts)
+            poly.Add(p);
+        if (!poly.IsDone())
+        {
+            std::cout << "Polygon not done!" << std::endl;
+        }
+        TopoDS_Wire visEdge = poly.Wire();
+        Handle(AIS_Shape) aShape = new AIS_Shape(visEdge);
+        myContext->Display(aShape, AIS_WireFrame, 0, false);
+    }
+    ///创建AIS_Shape
+    Handle(AIS_Shape) aShape = new AIS_Shape(bottle);
     myContext->Display(aShape, AIS_Shaded, 0, false);
 }
 
