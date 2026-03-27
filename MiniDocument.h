@@ -3,12 +3,15 @@
 //
 
 #pragma once
+#include <assert.h>
 #include <iostream>
 #include <map>
 #include <unordered_map>
 
 namespace MyTest
 {
+    class ControlBlock;
+
     class Object
     {
     public:
@@ -23,74 +26,77 @@ namespace MyTest
         }
 
     public:
+        ControlBlock* m_ControlBlock = nullptr;
         int m_Id;
     };
+
+    class ControlBlock
+    {
+    public:
+        Object* m_Object;
+        int m_RefCount;
+        bool m_IsRegister;
+    };
+
 
     class ElmHandle
     {
     public:
-        ElmHandle()
-        {
-            m_Object = nullptr;
-            count = 0;
-        }
+        ElmHandle() = delete;
 
-        explicit ElmHandle(Object* obj) : m_Object(obj)
+        explicit ElmHandle(ControlBlock* controlBlock) : m_ControlBlock(controlBlock)
         {
+            assert(controlBlock==nullptr);
             Inc();
         }
 
         ElmHandle(const ElmHandle&& elm) noexcept
         {
-            m_Object = elm.m_Object;
-            count = elm.count;
-            isRegister = elm.isRegister;
+            m_ControlBlock = elm.m_ControlBlock;
+            Inc();
         }
 
         ElmHandle(const ElmHandle& elm) noexcept
         {
-            m_Object = elm.m_Object;
-            count = elm.count;
-            isRegister = elm.isRegister;
+            m_ControlBlock = elm.m_ControlBlock;
+            Inc();
         }
 
         ~ElmHandle()
         {
             Dec();
-            if (IsExpired())
+            if (m_ControlBlock->m_RefCount == 0)
             {
-                delete m_Object;
-                m_Object = nullptr;
+                delete m_ControlBlock->m_Object;
+                delete m_ControlBlock;
             }
         }
 
         void Inc()
         {
-            ++count;
+            ++m_ControlBlock->m_RefCount;
         }
 
         void Dec()
         {
-            --count;
+            --m_ControlBlock->m_RefCount;
         }
 
         bool IsExpired() const
         {
-            return count == 0 || !isRegister;
+            return !m_ControlBlock->m_IsRegister;
         }
 
         void DoSomething() const
         {
             if (!IsExpired())
             {
-                m_Object->DoSomething();
+                m_ControlBlock->m_Object->DoSomething();
             }
         }
 
     public:
-        Object* m_Object = nullptr;
-        int count = 0;
-        mutable bool isRegister = false;
+        ControlBlock* m_ControlBlock = nullptr;
     };
 
     class MiniDocument
@@ -99,9 +105,12 @@ namespace MyTest
         ElmHandle* CreateObject(int id)
         {
             const auto obj = new Object(id);
-            auto handle = new ElmHandle(obj);
-            handle->isRegister = true;
-            m_Doc.insert(std::pair<int, ElmHandle*>(id, handle));
+            auto controlBlock = new ControlBlock();
+            obj->m_ControlBlock = controlBlock;
+            controlBlock->m_Object = obj;
+            controlBlock->m_IsRegister = true;
+            const auto handle = new ElmHandle(controlBlock);
+            m_Doc.insert(std::pair<int, Object*>(id, obj));
             return handle;
         }
 
@@ -109,14 +118,14 @@ namespace MyTest
         {
             if (m_Doc.find(id) != m_Doc.end())
             {
-                const auto handle = m_Doc[id];
-                handle->isRegister = false;
+                const auto object = m_Doc[id];
+                object->m_ControlBlock->m_IsRegister = false;
                 m_Doc.erase(id);
             }
         }
 
     private:
-        std::map<int, ElmHandle*> m_Doc;
+        std::map<int, Object*> m_Doc;
     };
 
     class Test
