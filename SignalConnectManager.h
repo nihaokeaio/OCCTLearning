@@ -379,6 +379,183 @@ namespace Version4
 }
 
 
+namespace Version5
+{
+    class Connection
+    {
+    public:
+        explicit Connection(const std::function<void()>& f): disConnectFun(f)
+        {
+        }
+
+        void disConnect() const
+        {
+            if (disConnectFun)
+            {
+                disConnectFun();
+            }
+        }
+
+    private:
+        std::function<void()> disConnectFun;
+    };
+
+    class Trackable
+    {
+    public:
+        ~Trackable()
+        {
+            // 析构时自动断开所有连接
+            for (auto& conn : connections)
+            {
+                if (conn) conn->disConnect();
+            }
+        }
+
+        void addConnection(const std::shared_ptr<Connection>& conn)
+        {
+            connections.push_back(conn);
+        }
+
+    private:
+        std::vector<std::shared_ptr<Connection>> connections;
+    };
+
+
+    template <typename... Args>
+    class Signal
+    {
+    public:
+        struct Slot
+        {
+            std::function<void(Args...)> fun;
+            Connection* connection;
+        };
+
+        using Signature = void(Args...);
+        using ArgsTuple = std::tuple<Args...>;
+        ///类成员函数
+        template <class T>
+        std::shared_ptr<Connection> connect(const std::shared_ptr<T>& object, void (T::*method)(Args... args))
+        {
+            auto s = std::make_shared<Slot>();
+            auto conn = std::make_shared<Connection>([this,s]()
+            {
+                slots.erase(std::remove(slots.begin(), slots.end(), s), slots.end());
+            });
+
+            s->fun = [object,method](Args... args)
+            {
+                (object.get()->*method)(args...);
+            };
+            s->connection = conn.get();
+            slots.push_back(s);
+            static_cast<Trackable>(object).addConnection(conn);
+            return conn;
+        }
+
+        ///匿名函数
+        std::shared_ptr<Connection> connect(const std::function<void(Args... args)>& f)
+        {
+            auto s = std::make_shared<Slot>();
+            s->fun = f;
+            slots.push_back(s);
+            return std::make_shared<Connection>([this,s]()
+            {
+                slots.erase(std::remove(slots.begin(), slots.end(), s), slots.end());
+            });
+        }
+
+        void emit(Args... args)
+        {
+            for (auto s : slots)
+            {
+                s->fun(args...);
+            }
+        }
+
+    private:
+        std::vector<std::shared_ptr<Slot>> slots{};
+    };
+
+    ///类型提取器
+    template <typename T>
+    struct FunctionTraits;
+
+    ///普通函数
+    template <typename R, typename... Args>
+    struct FunctionTraits<R(*)(Args...)>
+    {
+        using ReturnType = R;
+        using ArgsTuple = std::tuple<Args...>;
+    };
+
+    ///类成员函数
+    template <typename C, typename R, typename... Args>
+    struct FunctionTraits<R(C::*)(Args...)>
+    {
+        using ClassType = C;
+        using ReturnType = R;
+        using ArgsTuple = std::tuple<Args...>;
+    };
+
+    ///类成员变量
+    template <typename C, typename T>
+    struct FunctionTraits<T C::*>
+    {
+        using MemberType = T;
+    };
+
+    ///类成员函数const
+    template <typename C, typename R, typename... Args>
+    struct FunctionTraits<R(C::*)(Args...) const>
+    {
+        using ClassType = C;
+        using ReturnType = R;
+        using ArgsTuple = std::tuple<Args...>;
+    };
+
+    template <typename Sender, typename SignalType, typename Receiver, typename SlotType>
+    std::shared_ptr<Connection> connect(Sender* sender, SignalType signal, Receiver* receiver, SlotType slot)
+    {
+        //1. 提取类型
+        using SignalTraits = FunctionTraits<SignalType>;
+        using SlotTraits = FunctionTraits<SlotType>;
+
+        using SignalClass = typename SignalTraits::MemberType;
+        using SignalArgs = typename SignalClass::ArgsTuple;
+        using ReceiverArgs = typename SlotTraits::ArgsTuple;
+
+        ///类型检查器
+        //TypeDumper<typename SlotTraits::ArgsTuple> dump1;
+
+        //2. 编译检查
+        static_assert(std::is_same_v<SignalArgs, ReceiverArgs>, "Signal and Slot arguments must match!");
+
+        // 3. 真正连接（调用你已有的 Signal::connect）
+        return (sender->*signal).connect([receiver,slot](auto&&... args)
+        {
+            (receiver->*slot)(std::forward<decltype(args)>(args)...);
+        });
+    }
+
+    class A
+    {
+    public:
+        Signal<int> sig;
+    };
+
+    class B
+    {
+    public:
+        void onSig(int x)
+        {
+            std::cout << "B::onSig " << x << "\n";
+        }
+    };
+}
+
+
 class Player
 {
 public:
@@ -394,7 +571,7 @@ class SignalConnectManager
 public:
     SignalConnectManager()
     {
-        test4();
+        test5();
     }
 
     void test3()
@@ -420,6 +597,14 @@ public:
 
         a.sig.emit(10);
         c.disConnect();
+    }
+
+    void test5()
+    {
+        Version5::A a;
+        Version5::B b;
+        auto c0 = Version5::connect(&a, &Version5::A::sig, &b, &Version5::B::onSig);
+        a.sig.emit(10);
     }
 };
 
