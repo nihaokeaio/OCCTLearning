@@ -40,6 +40,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include "ShortCutManager.h"
+
 namespace
 {
     //! Convert GLFW mouse button into Aspect_VKeyMouse.
@@ -202,6 +204,8 @@ void GlfwOcctView::initViewer()
     aCube->SetViewAnimation(this->ViewAnimation());
     aCube->SetFixedAnimationLoop(false);
     myContext->Display(aCube, false);
+
+    m_ShortCutManager = std::make_unique<ShortCutManager>(myView, aGraphicDriver);
 }
 
 void GlfwOcctView::initGui()
@@ -243,6 +247,7 @@ void GlfwOcctView::renderGui()
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+    m_ShortCutManager->Test();
     glfwSwapBuffers(myOcctWindow->getGlfwWindow());
 }
 
