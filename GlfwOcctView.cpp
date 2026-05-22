@@ -40,6 +40,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include "ModernCPPTest.h"
+
 namespace
 {
     //! Convert GLFW mouse button into Aspect_VKeyMouse.
@@ -202,6 +204,8 @@ void GlfwOcctView::initViewer()
     aCube->SetViewAnimation(this->ViewAnimation());
     aCube->SetFixedAnimationLoop(false);
     myContext->Display(aCube, false);
+    myTest = std::make_unique<ModernCPPTest>();
+    myTest->Test();
 }
 
 void GlfwOcctView::initGui()
