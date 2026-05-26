@@ -29,6 +29,8 @@
 #include <AIS_ViewController.hxx>
 #include <V3d_View.hxx>
 
+#include "DependencyGraphManager.h"
+
 //! Sample class creating 3D Viewer within GLFW window.
 class GlfwOcctView : protected AIS_ViewController
 {
@@ -128,7 +130,7 @@ private:
     Handle(V3d_View) myView;
     Handle(AIS_InteractiveContext) myContext;
     bool myToWaitEvents = true;
-
+    std::unique_ptr<DependencyGraphManager> myDependencyGraphManager;
 };
 
 #endif // _GlfwOcctView_Header

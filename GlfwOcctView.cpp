@@ -202,6 +202,8 @@ void GlfwOcctView::initViewer()
     aCube->SetViewAnimation(this->ViewAnimation());
     aCube->SetFixedAnimationLoop(false);
     myContext->Display(aCube, false);
+    myDependencyGraphManager = std::make_unique<DependencyGraphManager>();
+    myDependencyGraphManager->Test();
 }
 
 void GlfwOcctView::initGui()
