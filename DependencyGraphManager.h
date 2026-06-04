@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <iostream>
+#include <variant>
 
 struct ComputerNode;
 struct Render;
@@ -99,11 +100,6 @@ struct ValueId
     int m_Id;
 };
 
-struct ValueHandle
-{
-    virtual ~ValueHandle() = default;
-};
-
 
 // 需要特化 hash
 namespace std
@@ -126,6 +122,68 @@ namespace std
         }
     };
 }
+
+// 属性值类型
+using PropertyValue = std::variant<int, double, gp_Pnt, std::string>;
+
+// 属性基类
+struct Property
+{
+    std::string m_Name;
+    [[nodiscard]] virtual PropertyValue Get() const = 0;
+    virtual void Set(const PropertyValue& val) = 0;
+    virtual ~Property() = default;
+};
+
+// 具体属性
+template <typename T>
+struct TypedProperty final : Property
+{
+    T m_Value;
+    std::function<void(const PropertyValue& newVal, const PropertyValue& oldVal)> m_OnSetFun;
+
+    [[nodiscard]] PropertyValue Get() const override { return m_Value; }
+
+    void Set(const PropertyValue& val) override
+    {
+        if (m_OnSetFun)
+            m_OnSetFun(val, m_Value);
+        m_Value = std::get<T>(val);
+    }
+};
+
+// 带有属性系统的ValueHandle
+struct ValueHandle
+{
+    virtual ~ValueHandle() = default;
+
+
+    template <typename T>
+    void AddProperty(const std::string& name, T initialValue)
+    {
+        auto prop = std::make_unique<TypedProperty<T>>();
+        prop->m_Name = name;
+        prop->m_Value = initialValue;
+        properties[name] = std::move(prop);
+    }
+
+    template <typename T>
+    T GetProperty(const std::string& name) const
+    {
+        const auto it = properties.find(name);
+        return std::get<T>(it->second->Get());
+    }
+
+    template <typename T>
+    void SetProperty(const std::string& name, const T& value)
+    {
+        auto it = properties.find(name);
+        it->second->Set(value);
+    }
+
+    ValueId m_Id;
+    std::unordered_map<std::string, std::unique_ptr<Property>> properties;
+};
 
 struct DGContext
 {
@@ -183,19 +241,6 @@ struct DirtyNode
     DirtyFlags flags;
 };
 
-
-struct JointNode : ValueHandle
-{
-    gp_Pnt m_Position;
-    ValueId m_Id;
-};
-
-struct SegmentNode : ValueHandle
-{
-    double m_Length;
-    ValueId m_Id;
-};
-
 struct Render
 {
     void Update(ValueId node)
@@ -247,6 +292,8 @@ struct GraphExecutor
 
 struct PositionToLengthNode : ComputerNode
 {
+    using SmartPtr = std::shared_ptr<ValueHandle>;
+
     PositionToLengthNode(const ValueId& inputA, const ValueId& inputB, const ValueId& output):
         m_InputA(inputA),
         m_InputB(inputB), m_Output(output)
@@ -255,15 +302,16 @@ struct PositionToLengthNode : ComputerNode
 
     void Evaluator(DGContext& context) override
     {
-        const auto& p0 = dynamic_cast<JointNode*>(context.m_Position[m_InputA].get());
-        const auto& p1 = dynamic_cast<JointNode*>(context.m_Position[m_InputB].get());
-        auto segmentNode = dynamic_cast<SegmentNode*>(context.m_Length[m_Output].get());
-        segmentNode->m_Length = p0->m_Position.Distance(p1->m_Position);
+        const auto& v0 = context.m_Position[m_InputA];
+        const auto& v1 = context.m_Position[m_InputB];
+        const auto& v2 = context.m_Length[m_Output];
+        computeFunc(v0, v1, v2);
     }
 
     ValueId m_InputA;
     ValueId m_InputB;
     ValueId m_Output;
+    std::function<void(const SmartPtr& v0, const SmartPtr& v1, const SmartPtr& v2)> computeFunc;
 };
 
 struct LengthToRenderNode : ComputerNode
@@ -287,9 +335,14 @@ public:
     void Test()
     {
         ///数据层
-        auto j0 = std::make_shared<JointNode>();
-        auto j1 = std::make_shared<JointNode>();
-        auto s0 = std::make_shared<SegmentNode>();
+        auto j0 = std::make_shared<ValueHandle>();
+        j0->AddProperty("position", gp_Pnt(0, 0, 0)); // 属性名 + 初始值
+        auto j1 = std::make_shared<ValueHandle>();
+        j1->AddProperty("position", gp_Pnt(0, 0, 0)); // 属性名 + 初始值
+
+        auto s0 = std::make_shared<ValueHandle>();
+        s0->AddProperty("length", 0.0); // 属性名 + 初始值
+
         m_Context.m_Position.insert({j0->m_Id, j0});
         m_Context.m_Position.insert({j1->m_Id, j1});
         m_Context.m_Length.insert({s0->m_Id, s0});
@@ -298,6 +351,13 @@ public:
 
         ///数据流层
         auto pNode = std::make_unique<PositionToLengthNode>(j0->m_Id, j1->m_Id, s0->m_Id);
+        pNode->computeFunc = [](const std::shared_ptr<ValueHandle>& in0, const std::shared_ptr<ValueHandle>& in1,
+                                const std::shared_ptr<ValueHandle>& out)
+        {
+            auto v0 = in0->GetProperty<gp_Pnt>("position");
+            auto v1 = in1->GetProperty<gp_Pnt>("position");
+            out->SetProperty("length", v0.Distance(v1));
+        };
         auto lNode = std::make_unique<LengthToRenderNode>(s0->m_Id);
 
         ///数据元到计算节点的依赖图
@@ -314,9 +374,8 @@ public:
 
 
         ///变更
-        j0Ptr->m_Position = {100, 100, 100};
+        j0Ptr->SetProperty("position", gp_Pnt{100, 100, 100});
         m_GraphExecutor.MarkDirty(j0Ptr->m_Id);
-
 
         m_GraphExecutor.Evaluate(m_Context);
     }
