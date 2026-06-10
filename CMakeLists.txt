@@ -35,6 +35,10 @@ target_compile_options(OcctImgui PRIVATE
     $<$<CONFIG:Release>:-O3>
 )
 
+target_compile_definitions(OcctImgui PRIVATE
+        $<$<CONFIG:Debug>:DG_ENABLE_TRACE>
+)
+
 target_link_directories(OcctImgui PRIVATE
     $<$<CONFIG:Debug>:${DEBUG_LIBS}>
     $<$<CONFIG:Release>:${RELEASE_LIBS}>

@@ -6,6 +6,7 @@
 #include "ValueHandle.h"
 
 #include <memory>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -20,12 +21,16 @@ struct DGContext
     ValueHandle& GetValueHandle(const ValueId& id);
     const ValueHandle& GetValueHandle(const ValueId& id) const;
 
-    void AddComputerNode(std::unique_ptr<ComputerNode>&& node, const std::vector<ValueId>& inputs,
-                         const std::vector<ValueId>& outputs);
+    ComputerNodeId AddComputerNode(std::unique_ptr<ComputerNode>&& node, const std::vector<ValueId>& inputs,
+                                   const std::vector<ValueId>& outputs);
 
-    ComputerNode* AddComputeNode(const std::vector<ValueId>& inputs,
-                                 const std::vector<ValueId>& outputs,
-                                 ComputerNode::ComputeFunc computeFunc);
+    ComputerNodeId AddComputeNode(const std::vector<ValueId>& inputs,
+                                  const std::vector<ValueId>& outputs,
+                                  ComputerNode::ComputeFunc computeFunc);
+
+    /// 环检测：沿 Value -> ComputerNode -> Value 方向判断可达性。
+    bool CanReachValue(ValueId from, ValueId target) const;
+    bool WouldCreateCycle(const std::vector<ValueId>& inputs, const std::vector<ValueId>& outputs) const;
 
     ValueId AddValueHandle(std::unique_ptr<ValueHandle>&& valueHandle);
 
@@ -35,10 +40,19 @@ struct DGContext
     template <class T>
     void SetValueProperty(const ValueId& valueId, const std::string& propertyName, const T& value);
 
+    [[nodiscard]] std::string DumpGraph() const;
+    void DumpGraph(std::ostream& out) const;
+    [[nodiscard]] std::string ValueLabel(const ValueId& id) const;
+    [[nodiscard]] std::string NodeLabel(const ComputerNodeId& id) const;
+    void SetDebugName(const ValueId& id, std::string name);
+    void SetDebugName(const ComputerNodeId& id, std::string name);
+
     void Evaluator();
 
     std::unordered_map<ValueId, std::unique_ptr<ValueHandle>> m_Values;
     std::unordered_map<ComputerNodeId, std::unique_ptr<ComputerNode>> m_Nodes;
+    std::unordered_map<ValueId, std::string> m_ValueDebugNames;
+    std::unordered_map<ComputerNodeId, std::string> m_NodeDebugNames;
     std::unique_ptr<Render> render;
     std::unique_ptr<GraphExecutor> m_GraphExecutor;
 };
@@ -60,5 +74,5 @@ void DGContext::SetValueProperty(const ValueId& valueId, const std::string& prop
         throw std::runtime_error("ValueHandle does not exist");
     }
     iter->second->SetProperty(propertyName, value);
-    m_GraphExecutor->MarkDirty(valueId);
+    m_GraphExecutor->MarkDirty(valueId, this);
 }
