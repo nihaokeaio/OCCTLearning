@@ -75,5 +75,6 @@ void DependencyGraphManager::Test()
 #endif
 
     m_Context.SetValueProperty(j0, "position", gp_Pnt{10, 0, 0});
+    m_Context.SetValueProperty(s1, "length", 200.0);
     m_Context.Evaluator();
 }
