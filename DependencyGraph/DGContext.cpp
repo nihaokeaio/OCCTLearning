@@ -11,6 +11,7 @@
 DGContext::DGContext()
 {
     m_GraphExecutor = std::make_unique<GraphExecutor>();
+    m_Render = std::make_unique<Render>();
 }
 
 ComputerNode* DGContext::GetComputerNode(const ComputerNodeId& id)
@@ -31,6 +32,16 @@ ValueHandle& DGContext::GetValueHandle(const ValueId& id)
 const ValueHandle& DGContext::GetValueHandle(const ValueId& id) const
 {
     return *m_Values.at(id);
+}
+
+ComputerNode* DGContext::GetNode(const ComputerNodeId& nodeId)
+{
+    return m_Nodes.at(nodeId).get();
+}
+
+Render* DGContext::GetRender()
+{
+    return m_Render.get();
 }
 
 ComputerNodeId DGContext::AddComputerNode(std::unique_ptr<ComputerNode>&& node, const std::vector<ValueId>& inputs,
@@ -59,13 +70,13 @@ ComputerNodeId DGContext::AddComputerNode(std::unique_ptr<ComputerNode>&& node, 
     node->m_Inputs = inputs;
     for (const auto& inputId : inputs)
     {
-        m_GraphExecutor->dependNodeLists[inputId].push_back(node->m_Id);
+        m_GraphExecutor->AddDependentNode(inputId, node->m_Id);
     }
 
     node->m_Outputs = outputs;
     for (const auto& outputId : outputs)
     {
-        m_GraphExecutor->nodeOutputs[node->m_Id].push_back(outputId);
+        m_GraphExecutor->AddNodeOutput(node->m_Id, outputId);
     }
     const auto id = node->m_Id;
     m_Nodes.insert({id, std::move(node)});
@@ -101,22 +112,17 @@ bool DGContext::CanReachValue(ValueId from, ValueId target) const
         {
             continue;
         }
-
-        const auto dependentNodes = m_GraphExecutor->dependNodeLists.find(current);
-        if (dependentNodes == m_GraphExecutor->dependNodeLists.end())
-        {
+        const auto dependentNodes = m_GraphExecutor->FindDependentNodes(current);
+        if (dependentNodes == nullptr)
             continue;
-        }
 
-        for (const auto& nodeId : dependentNodes->second)
+        for (const auto& nodeId : *dependentNodes)
         {
-            const auto outputs = m_GraphExecutor->nodeOutputs.find(nodeId);
-            if (outputs == m_GraphExecutor->nodeOutputs.end())
-            {
+            const auto outputs = m_GraphExecutor->FindNodeOutputs(nodeId);
+            if (outputs == nullptr)
                 continue;
-            }
 
-            for (const auto& outputId : outputs->second)
+            for (const auto& outputId : *outputs)
             {
                 if (outputId == target)
                 {
@@ -240,7 +246,7 @@ void DGContext::SetDebugName(const ComputerNodeId& id, std::string name)
     m_NodeDebugNames.insert_or_assign(id, std::move(name));
 }
 
-void DGContext::Evaluator()
+bool DGContext::Evaluator()
 {
-    m_GraphExecutor->Evaluate(this);
+    return m_GraphExecutor->Evaluate(this);
 }

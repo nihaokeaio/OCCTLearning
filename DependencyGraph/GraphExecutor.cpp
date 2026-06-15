@@ -46,6 +46,7 @@ void GraphExecutor::MarkDirty(ValueId id, const DGContext* context)
 bool GraphExecutor::Evaluate(DGContext* context)
 {
     size_t batchIndex = 0;
+    bool hasEvaluatedNode = false;
     while (!dirtyQueue.empty())
     {
         ++batchIndex;
@@ -56,12 +57,46 @@ bool GraphExecutor::Evaluate(DGContext* context)
 #endif
         CollectDirtyNodes(context, dirtyNodeQueue, dirtyNodeIds);
         BatchNodeSort(context, dirtyNodeQueue, dirtyNodeIds);
+        if (!dirtyNodeIds.empty())
+        {
+            hasEvaluatedNode = true;
+        }
         EvaluateDirtyNodes(context, dirtyNodeQueue, dirtyNodeIds);
 #ifdef DG_ENABLE_TRACE
         Trace("EndBatch #" + std::to_string(batchIndex));
 #endif
     }
-    return false;
+    return hasEvaluatedNode;
+}
+
+void GraphExecutor::AddDependentNode(ValueId valueId, ComputerNodeId nodeId)
+{
+    dependNodeLists[valueId].push_back(nodeId);
+}
+
+void GraphExecutor::AddNodeOutput(ComputerNodeId nodeId, ValueId valueId)
+{
+    nodeOutputs[nodeId].push_back(valueId);
+}
+
+const std::vector<ComputerNodeId>* GraphExecutor::FindDependentNodes(ValueId valueId) const
+{
+    const auto iter = dependNodeLists.find(valueId);
+    if (iter == dependNodeLists.end())
+    {
+        return nullptr;
+    }
+    return &iter->second;
+}
+
+const std::vector<ValueId>* GraphExecutor::FindNodeOutputs(ComputerNodeId nodeId) const
+{
+    const auto iter = nodeOutputs.find(nodeId);
+    if (iter == nodeOutputs.end())
+    {
+        return nullptr;
+    }
+    return &iter->second;
 }
 
 void GraphExecutor::CollectDirtyNodes(DGContext* context, std::queue<ComputerNodeId>& dirtyNodeQueue,
@@ -128,7 +163,7 @@ void GraphExecutor::EvaluateDirtyNodes(DGContext* context, std::queue<ComputerNo
         auto computerNodeId = dirtyNodeQueue.front();
         dirtyNodeQueue.pop();
 
-        const auto node = context->m_Nodes[computerNodeId].get();
+        const auto node = context->GetNode(computerNodeId);
 #ifdef DG_ENABLE_TRACE
         Trace("EvaluateNode " + context->NodeLabel(computerNodeId));
 #endif

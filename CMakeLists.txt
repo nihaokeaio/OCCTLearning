@@ -24,6 +24,10 @@ list(FILTER SOURCES EXCLUDE REGEX ".*CMakeFiles.*")
 # Add executable target
 add_executable(OcctImgui ${SOURCES})
 
+target_include_directories(OcctImgui PRIVATE
+    ${CMAKE_SOURCE_DIR}
+)
+
 # Link libraries
 target_link_libraries(OcctImgui
 PRIVATE    TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKMesh TKService TKOpenGl TKV3d

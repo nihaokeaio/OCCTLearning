@@ -16,23 +16,20 @@ struct DGContext
 {
     DGContext();
 
-    ComputerNode* GetComputerNode(const ComputerNodeId& id);
+    [[nodiscard]] ComputerNode* GetComputerNode(const ComputerNodeId& id);
 
     ValueHandle& GetValueHandle(const ValueId& id);
-    const ValueHandle& GetValueHandle(const ValueId& id) const;
+    [[nodiscard]] const ValueHandle& GetValueHandle(const ValueId& id) const;
 
-    ComputerNodeId AddComputerNode(std::unique_ptr<ComputerNode>&& node, const std::vector<ValueId>& inputs,
-                                   const std::vector<ValueId>& outputs);
+    [[nodiscard]] ComputerNode* GetNode(const ComputerNodeId& nodeId);
+
+    [[nodiscard]] Render* GetRender();
+
 
     ComputerNodeId AddComputeNode(const std::vector<ValueId>& inputs,
                                   const std::vector<ValueId>& outputs,
                                   ComputerNode::ComputeFunc computeFunc);
 
-    /// 环检测：沿 Value -> ComputerNode -> Value 方向判断可达性。
-    bool CanReachValue(ValueId from, ValueId target) const;
-    bool WouldCreateCycle(const std::vector<ValueId>& inputs, const std::vector<ValueId>& outputs) const;
-
-    ValueId AddValueHandle(std::unique_ptr<ValueHandle>&& valueHandle);
 
     template <class T>
     ValueId CreateValue(const std::string& propertyName, const T& initialValue);
@@ -40,6 +37,10 @@ struct DGContext
     template <class T>
     void SetValueProperty(const ValueId& valueId, const std::string& propertyName, const T& value);
 
+
+    bool Evaluator();
+
+public:
     [[nodiscard]] std::string DumpGraph() const;
     void DumpGraph(std::ostream& out) const;
     [[nodiscard]] std::string ValueLabel(const ValueId& id) const;
@@ -47,13 +48,24 @@ struct DGContext
     void SetDebugName(const ValueId& id, std::string name);
     void SetDebugName(const ComputerNodeId& id, std::string name);
 
-    void Evaluator();
+private:
+    ComputerNodeId AddComputerNode(std::unique_ptr<ComputerNode>&& node, const std::vector<ValueId>& inputs,
+                                   const std::vector<ValueId>& outputs);
 
+    /// 环检测：沿 Value -> ComputerNode -> Value 方向判断可达性。
+    bool CanReachValue(ValueId from, ValueId target) const;
+
+    bool WouldCreateCycle(const std::vector<ValueId>& inputs, const std::vector<ValueId>& outputs) const;
+
+
+    ValueId AddValueHandle(std::unique_ptr<ValueHandle>&& valueHandle);
+
+private:
     std::unordered_map<ValueId, std::unique_ptr<ValueHandle>> m_Values;
     std::unordered_map<ComputerNodeId, std::unique_ptr<ComputerNode>> m_Nodes;
     std::unordered_map<ValueId, std::string> m_ValueDebugNames;
     std::unordered_map<ComputerNodeId, std::string> m_NodeDebugNames;
-    std::unique_ptr<Render> render;
+    std::unique_ptr<Render> m_Render;
     std::unique_ptr<GraphExecutor> m_GraphExecutor;
 };
 

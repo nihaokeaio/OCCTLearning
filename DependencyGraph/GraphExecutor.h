@@ -14,6 +14,12 @@ struct GraphExecutor
     void MarkDirty(ValueId id, const DGContext* context = nullptr);
     bool Evaluate(DGContext* context);
 
+    void AddDependentNode(ValueId valueId, ComputerNodeId nodeId);
+    void AddNodeOutput(ComputerNodeId nodeId, ValueId valueId);
+
+    [[nodiscard]] const std::vector<ComputerNodeId>* FindDependentNodes(ValueId valueId) const;
+    [[nodiscard]] const std::vector<ValueId>* FindNodeOutputs(ComputerNodeId nodeId) const;
+
 private:
     // 消费当前 dirty value 队列，收集本批需要执行的计算节点。
     // 注意：这里不会执行节点，只是把“哪些节点被脏值触发”转成一个 batch。
@@ -31,7 +37,7 @@ private:
     bool SuppressCurrentBatchConsumers(ValueId outputValueId,
                                        const std::unordered_set<ComputerNodeId>& currentBatchNodeIds);
 
-public:
+private:
     std::queue<ValueId> dirtyQueue;
     std::unordered_set<ValueId> m_DirtyValues;
     // value -> 本批已经被满足的消费者节点。
