@@ -25,6 +25,15 @@ struct SketchArea
     ComputerNodeId computeNode;
 };
 
+// 业务层对象
+struct SketchDistanceDimension
+{
+    SketchPoint start;
+    SketchPoint end;
+    ValueId measuredLength;
+    ComputerNodeId computeNode;
+};
+
 class SketchModel
 {
 public:
@@ -37,7 +46,14 @@ public:
                                    const std::string& debugName = {});
     SketchArea CreateCircleAreaFromRadius(const SketchSegment& radius,
                                           const std::string& debugName = {});
+    ComputerNodeId AddPointRenderNode(const SketchPoint& point, const std::string& debugName = {});
     ComputerNodeId AddLengthRenderNode(const SketchSegment& segment, const std::string& debugName = {});
+    ComputerNodeId AddDistanceRenderNode(const SketchDistanceDimension& dimension, const std::string& debugName = {});
+
+    // 业务层对象
+    SketchDistanceDimension CreateDistanceDimension(const SketchPoint& start, const SketchPoint& end,
+                                                    const std::string& debugName = {});
+    [[nodiscard]] double GetDistance(const SketchDistanceDimension& dimension) const;
 
     void MovePoint(const SketchPoint& point, const gp_Pnt& position);
     bool Evaluate();
@@ -47,6 +63,9 @@ public:
     [[nodiscard]] double GetArea(const SketchArea& area) const;
 
 private:
+    ComputerNodeId AddValueRenderNode(ValueId valueId, const std::string& debugName);
+    ComputerNodeId AddDistanceComputeNode(ValueId startPosition, ValueId endPosition, ValueId outputLength);
+
     static constexpr const char* PositionProperty = "position";
     static constexpr const char* LengthProperty = "length";
     static constexpr const char* AreaProperty = "area";

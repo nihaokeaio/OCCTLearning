@@ -5,6 +5,7 @@
 #include "Render.h"
 #include "ValueHandle.h"
 
+#include <functional>
 #include <memory>
 #include <ostream>
 #include <stdexcept>
@@ -39,6 +40,9 @@ struct DGContext
 
 
     bool Evaluator();
+    void SetTraceEnabled(bool enabled);
+    [[nodiscard]] bool IsTraceEnabled() const;
+    void SetFlowTraceCallback(GraphExecutor::FlowTraceCallback callback);
 
 public:
     [[nodiscard]] std::string DumpGraph() const;

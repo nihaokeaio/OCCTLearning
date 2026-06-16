@@ -250,3 +250,18 @@ bool DGContext::Evaluator()
 {
     return m_GraphExecutor->Evaluate(this);
 }
+
+void DGContext::SetTraceEnabled(bool enabled)
+{
+    m_GraphExecutor->SetTraceEnabled(enabled);
+}
+
+bool DGContext::IsTraceEnabled() const
+{
+    return m_GraphExecutor->IsTraceEnabled();
+}
+
+void DGContext::SetFlowTraceCallback(GraphExecutor::FlowTraceCallback callback)
+{
+    m_GraphExecutor->SetFlowTraceCallback(std::move(callback));
+}

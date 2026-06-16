@@ -3,7 +3,9 @@
 #include "ComputerNode.h"
 #include "DGContext.h"
 
+#include <sstream>
 #include <stdexcept>
+#include <utility>
 
 #ifdef DG_ENABLE_TRACE
 #include <iostream>
@@ -23,6 +25,11 @@ namespace
     {
         std::cout << "[DGTrace] " << message << std::endl;
     }
+
+    bool IsRenderNode(const DGContext* context, const ComputerNodeId& id)
+    {
+        return context != nullptr && context->NodeLabel(id).starts_with("render ");
+    }
 }
 #endif
 
@@ -32,13 +39,19 @@ void GraphExecutor::MarkDirty(ValueId id, const DGContext* context)
     {
         dirtyQueue.push(id);
 #ifdef DG_ENABLE_TRACE
-        Trace("MarkDirty " + ValueTraceLabel(context, id));
+        if (m_TraceEnabled)
+        {
+            Trace("MarkDirty " + ValueTraceLabel(context, id));
+        }
 #endif
     }
 #ifdef DG_ENABLE_TRACE
     else
     {
-        Trace("SkipDirtyAlreadyQueued " + ValueTraceLabel(context, id));
+        if (m_TraceEnabled)
+        {
+            Trace("SkipDirtyAlreadyQueued " + ValueTraceLabel(context, id));
+        }
     }
 #endif
 }
@@ -47,13 +60,17 @@ bool GraphExecutor::Evaluate(DGContext* context)
 {
     size_t batchIndex = 0;
     bool hasEvaluatedNode = false;
+    ClearFlowTraceState();
     while (!dirtyQueue.empty())
     {
         ++batchIndex;
         std::queue<ComputerNodeId> dirtyNodeQueue;
         std::unordered_set<ComputerNodeId> dirtyNodeIds;
 #ifdef DG_ENABLE_TRACE
-        Trace("BeginBatch #" + std::to_string(batchIndex));
+        if (m_TraceEnabled)
+        {
+            Trace("BeginBatch #" + std::to_string(batchIndex));
+        }
 #endif
         CollectDirtyNodes(context, dirtyNodeQueue, dirtyNodeIds);
         BatchNodeSort(context, dirtyNodeQueue, dirtyNodeIds);
@@ -63,10 +80,29 @@ bool GraphExecutor::Evaluate(DGContext* context)
         }
         EvaluateDirtyNodes(context, dirtyNodeQueue, dirtyNodeIds);
 #ifdef DG_ENABLE_TRACE
-        Trace("EndBatch #" + std::to_string(batchIndex));
+        if (m_TraceEnabled)
+        {
+            Trace("EndBatch #" + std::to_string(batchIndex));
+        }
 #endif
     }
+    EmitFlowSummary(context);
     return hasEvaluatedNode;
+}
+
+void GraphExecutor::SetTraceEnabled(bool enabled)
+{
+    m_TraceEnabled = enabled;
+}
+
+bool GraphExecutor::IsTraceEnabled() const
+{
+    return m_TraceEnabled;
+}
+
+void GraphExecutor::SetFlowTraceCallback(FlowTraceCallback callback)
+{
+    m_FlowTraceCallback = std::move(callback);
 }
 
 void GraphExecutor::AddDependentNode(ValueId valueId, ComputerNodeId nodeId)
@@ -108,13 +144,19 @@ void GraphExecutor::CollectDirtyNodes(DGContext* context, std::queue<ComputerNod
         dirtyQueue.pop();
         m_DirtyValues.erase(dirtyValueId);
 #ifdef DG_ENABLE_TRACE
-        Trace("PopDirty " + context->ValueLabel(dirtyValueId));
+        if (m_TraceEnabled)
+        {
+            Trace("PopDirty " + context->ValueLabel(dirtyValueId));
+        }
 #endif
         const auto& iter = dependNodeLists.find(dirtyValueId);
         if (iter == dependNodeLists.end())
         {
 #ifdef DG_ENABLE_TRACE
-            Trace("NoDependents " + context->ValueLabel(dirtyValueId));
+            if (m_TraceEnabled)
+            {
+                Trace("NoDependents " + context->ValueLabel(dirtyValueId));
+            }
 #endif
             continue;
         }
@@ -129,25 +171,35 @@ void GraphExecutor::CollectDirtyNodes(DGContext* context, std::queue<ComputerNod
                 suppressedIter->second.contains(computerNodeId))
             {
 #ifdef DG_ENABLE_TRACE
-                Trace("SkipNodeSatisfiedInPreviousBatch " + context->NodeLabel(computerNodeId) + " because " +
-                    context->ValueLabel(dirtyValueId));
+                if (m_TraceEnabled && !IsRenderNode(context, computerNodeId))
+                {
+                    Trace("SkipNodeSatisfiedInPreviousBatch " + context->NodeLabel(computerNodeId) + " because " +
+                        context->ValueLabel(dirtyValueId));
+                }
 #endif
                 continue;
             }
 
+            RecordNodeTrigger(computerNodeId, dirtyValueId);
             if (dirtyNodeIds.insert(computerNodeId).second)
             {
                 dirtyNodeQueue.push(computerNodeId);
 #ifdef DG_ENABLE_TRACE
-                Trace("QueueNode " + context->NodeLabel(computerNodeId) + " because " +
-                    context->ValueLabel(dirtyValueId));
+                if (m_TraceEnabled && !IsRenderNode(context, computerNodeId))
+                {
+                    Trace("QueueNode " + context->NodeLabel(computerNodeId) + " because " +
+                        context->ValueLabel(dirtyValueId));
+                }
 #endif
             }
 #ifdef DG_ENABLE_TRACE
             else
             {
-                Trace("SkipNodeAlreadyQueued " + context->NodeLabel(computerNodeId) + " because " +
-                    context->ValueLabel(dirtyValueId));
+                if (m_TraceEnabled && !IsRenderNode(context, computerNodeId))
+                {
+                    Trace("SkipNodeAlreadyQueued " + context->NodeLabel(computerNodeId) + " because " +
+                        context->ValueLabel(dirtyValueId));
+                }
             }
 #endif
         }
@@ -165,20 +217,27 @@ void GraphExecutor::EvaluateDirtyNodes(DGContext* context, std::queue<ComputerNo
 
         const auto node = context->GetNode(computerNodeId);
 #ifdef DG_ENABLE_TRACE
-        Trace("EvaluateNode " + context->NodeLabel(computerNodeId));
+        if (m_TraceEnabled && !IsRenderNode(context, computerNodeId))
+        {
+            Trace("EvaluateNode " + context->NodeLabel(computerNodeId));
+        }
 #endif
         node->Evaluator(*context);
 
         auto outputIter = nodeOutputs.find(computerNodeId);
         if (outputIter != nodeOutputs.end())
         {
+            RecordNodeOutputs(computerNodeId, outputIter->second);
             for (const auto& outputValueId : outputIter->second)
             {
                 if (!dependNodeLists.contains(outputValueId))
                 {
 #ifdef DG_ENABLE_TRACE
-                    Trace("OutputHasNoDependents " + context->NodeLabel(computerNodeId) + " -> " +
-                        context->ValueLabel(outputValueId));
+                    if (m_TraceEnabled)
+                    {
+                        Trace("OutputHasNoDependents " + context->NodeLabel(computerNodeId) + " -> " +
+                            context->ValueLabel(outputValueId));
+                    }
 #endif
                     continue;
                 }
@@ -192,15 +251,21 @@ void GraphExecutor::EvaluateDirtyNodes(DGContext* context, std::queue<ComputerNo
                 if (!hasConsumersOutsideCurrentBatch)
                 {
 #ifdef DG_ENABLE_TRACE
-                    Trace("OutputConsumersAlreadyInBatch " + context->NodeLabel(computerNodeId) + " -> " +
-                        context->ValueLabel(outputValueId));
+                    if (m_TraceEnabled)
+                    {
+                        Trace("OutputConsumersAlreadyInBatch " + context->NodeLabel(computerNodeId) + " -> " +
+                            context->ValueLabel(outputValueId));
+                    }
 #endif
                     continue;
                 }
 
 #ifdef DG_ENABLE_TRACE
-                Trace("PropagateOutput " + context->NodeLabel(computerNodeId) + " -> " +
-                    context->ValueLabel(outputValueId));
+                if (m_TraceEnabled)
+                {
+                    Trace("PropagateOutput " + context->NodeLabel(computerNodeId) + " -> " +
+                        context->ValueLabel(outputValueId));
+                }
 #endif
                 MarkDirty(outputValueId, context);
             }
@@ -310,4 +375,64 @@ bool GraphExecutor::SuppressCurrentBatchConsumers(
         }
     }
     return hasConsumersOutsideCurrentBatch;
+}
+
+void GraphExecutor::ClearFlowTraceState()
+{
+    m_NodeTriggerValues.clear();
+    m_FlowEvents.clear();
+}
+
+void GraphExecutor::RecordNodeTrigger(ComputerNodeId nodeId, ValueId triggerValueId)
+{
+    m_NodeTriggerValues[nodeId].insert(triggerValueId);
+}
+
+void GraphExecutor::RecordNodeOutputs(ComputerNodeId nodeId, const std::vector<ValueId>& outputs)
+{
+    const auto triggerIter = m_NodeTriggerValues.find(nodeId);
+    if (triggerIter == m_NodeTriggerValues.end())
+    {
+        return;
+    }
+
+    for (const auto& triggerValueId : triggerIter->second)
+    {
+        m_FlowEvents.push_back({triggerValueId, nodeId, outputs});
+    }
+}
+
+void GraphExecutor::EmitFlowSummary(const DGContext* context) const
+{
+    if (!m_FlowTraceCallback || m_FlowEvents.empty() || context == nullptr)
+    {
+        return;
+    }
+
+    std::vector<std::string> lines;
+    for (const auto& event : m_FlowEvents)
+    {
+        std::ostringstream out;
+        out << context->ValueLabel(event.trigger)
+            << " -> " << context->NodeLabel(event.node);
+
+        if (!event.outputs.empty())
+        {
+            out << " -> ";
+            for (size_t i = 0; i < event.outputs.size(); ++i)
+            {
+                if (i != 0)
+                {
+                    out << ", ";
+                }
+                out << context->ValueLabel(event.outputs[i]);
+            }
+        }
+        lines.push_back(out.str());
+    }
+
+    if (!lines.empty())
+    {
+        m_FlowTraceCallback(lines);
+    }
 }

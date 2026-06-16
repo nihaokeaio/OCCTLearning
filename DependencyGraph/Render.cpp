@@ -1,8 +1,16 @@
 #include "Render.h"
 
-#include <iostream>
+#include <utility>
+
+void Render::SetUpdateCallback(UpdateCallback callback)
+{
+    m_UpdateCallback = std::move(callback);
+}
 
 void Render::Update(ValueId node)
 {
-    std::cout << node.m_Id << "update !" << std::endl;
+    if (m_UpdateCallback)
+    {
+        m_UpdateCallback(node);
+    }
 }

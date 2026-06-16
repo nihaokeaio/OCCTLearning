@@ -25,12 +25,9 @@
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
 
-#include <AIS_Shape.hxx>
 #include <AIS_ViewCube.hxx>
 #include <Aspect_Handle.hxx>
 #include <Aspect_DisplayConnection.hxx>
-#include <BRepPrimAPI_MakeBox.hxx>
-#include <BRepPrimAPI_MakeCone.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
 #include <OpenGl_GraphicDriver.hxx>
@@ -203,7 +200,7 @@ void GlfwOcctView::initViewer()
     aCube->SetFixedAnimationLoop(false);
     myContext->Display(aCube, false);
     myDependencyGraphManager = std::make_unique<DependencyGraphManager>();
-    myDependencyGraphManager->Test();
+    myDependencyGraphManager->InitializeDemoScene(myContext);
 }
 
 void GlfwOcctView::initGui()
@@ -230,16 +227,10 @@ void GlfwOcctView::renderGui()
 
     ImGui::NewFrame();
 
-    ImGui::ShowDemoWindow();
-
-    // Hello IMGUI.
-    ImGui::Begin("Hello");
-    ImGui::Text("Hello ImGui!");
-    ImGui::Text("Hello OpenCASCADE!");
-    ImGui::Button("OK");
-    ImGui::SameLine();
-    ImGui::Button("Cancel");
-    ImGui::End();
+    if (myDependencyGraphManager != nullptr)
+    {
+        myDependencyGraphManager->RenderGuiControls();
+    }
 
     ImGui::Render();
 
@@ -260,14 +251,6 @@ void GlfwOcctView::initDemoScene()
     }
 
     myView->TriedronDisplay(Aspect_TOTP_LEFT_LOWER, Quantity_NOC_GOLD, 0.08, V3d_WIREFRAME);
-
-    gp_Ax2 anAxis;
-    anAxis.SetLocation(gp_Pnt(0.0, 0.0, 0.0));
-    Handle(AIS_Shape) aBox = new AIS_Shape(BRepPrimAPI_MakeBox(anAxis, 50, 50, 50).Shape());
-    myContext->Display(aBox, AIS_Shaded, 0, false);
-    anAxis.SetLocation(gp_Pnt(25.0, 125.0, 0.0));
-    Handle(AIS_Shape) aCone = new AIS_Shape(BRepPrimAPI_MakeCone(anAxis, 25, 0, 50).Shape());
-    myContext->Display(aCone, AIS_Shaded, 0, false);
 
     TCollection_AsciiString aGlInfo;
     {
@@ -390,10 +373,23 @@ void GlfwOcctView::onMouseButton(int theButton, int theAction, int theMods)
     const Graphic3d_Vec2i aPos = myOcctWindow->CursorPosition();
     if (theAction == GLFW_PRESS)
     {
+        if (theButton == GLFW_MOUSE_BUTTON_LEFT &&
+            myDependencyGraphManager != nullptr &&
+            myDependencyGraphManager->BeginPointDrag(myView, aPos.x(), aPos.y()))
+        {
+            return;
+        }
         PressMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
     }
     else
     {
+        if (theButton == GLFW_MOUSE_BUTTON_LEFT &&
+            myDependencyGraphManager != nullptr &&
+            myDependencyGraphManager->IsDraggingPoint())
+        {
+            myDependencyGraphManager->EndPointDrag();
+            return;
+        }
         ReleaseMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
     }
 }
@@ -416,6 +412,12 @@ void GlfwOcctView::onMouseMove(int thePosX, int thePosY)
     }
     else
     {
+        if (myDependencyGraphManager != nullptr &&
+            myDependencyGraphManager->DragPointTo(myView, thePosX, thePosY))
+        {
+            return;
+        }
+
         const Graphic3d_Vec2i aNewPos(thePosX, thePosY);
         UpdateMousePosition(aNewPos, PressedMouseButtons(), LastMouseFlags(), Standard_False);
     }
