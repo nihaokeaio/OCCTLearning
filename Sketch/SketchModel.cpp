@@ -1,6 +1,6 @@
 #include "SketchModel.h"
 
-#include "DependencyGraph/ComputerView.h"
+#include "DependencyGraph/Core/ComputerView.h"
 
 SketchModel::SketchModel(DGContext& context)
     : m_Context(context)
@@ -9,7 +9,7 @@ SketchModel::SketchModel(DGContext& context)
 
 SketchPoint SketchModel::CreatePoint(const gp_Pnt& position, const std::string& debugName)
 {
-    SketchPoint point{m_Context.CreateValue(PositionProperty, position)};
+    SketchPoint point{m_Context.CreateInputValue(PositionProperty, position)};
     if (!debugName.empty())
     {
         m_Context.SetDebugName(point.position, debugName + ".position");
@@ -23,7 +23,7 @@ SketchSegment SketchModel::CreateSegment(const SketchPoint& start, const SketchP
     SketchSegment segment{
         start,
         end,
-        m_Context.CreateValue(LengthProperty, 0.0),
+        m_Context.CreateDerivedValue(LengthProperty, 0.0),
         {}
     };
 
@@ -41,7 +41,7 @@ SketchArea SketchModel::CreateRectangleArea(const SketchSegment& width, const Sk
                                             const std::string& debugName)
 {
     SketchArea area{
-        m_Context.CreateValue(AreaProperty, 0.0),
+        m_Context.CreateDerivedValue(AreaProperty, 0.0),
         {}
     };
 
@@ -65,7 +65,7 @@ SketchArea SketchModel::CreateCircleAreaFromRadius(const SketchSegment& radius,
                                                    const std::string& debugName)
 {
     SketchArea area{
-        m_Context.CreateValue(AreaProperty, 0.0),
+        m_Context.CreateDerivedValue(AreaProperty, 0.0),
         {}
     };
 
@@ -85,29 +85,13 @@ SketchArea SketchModel::CreateCircleAreaFromRadius(const SketchSegment& radius,
     return area;
 }
 
-ComputerNodeId SketchModel::AddPointRenderNode(const SketchPoint& point, const std::string& debugName)
-{
-    return AddValueRenderNode(point.position, debugName);
-}
-
-ComputerNodeId SketchModel::AddLengthRenderNode(const SketchSegment& segment, const std::string& debugName)
-{
-    return AddValueRenderNode(segment.length, debugName);
-}
-
-ComputerNodeId SketchModel::AddDistanceRenderNode(const SketchDistanceDimension& dimension,
-                                                  const std::string& debugName)
-{
-    return AddValueRenderNode(dimension.measuredLength, debugName);
-}
-
 SketchDistanceDimension SketchModel::CreateDistanceDimension(const SketchPoint& start, const SketchPoint& end,
                                                              const std::string& debugName)
 {
     SketchDistanceDimension dimension{
         start,
         end,
-        m_Context.CreateValue(LengthProperty, 0.0),
+        m_Context.CreateDerivedValue(LengthProperty, 0.0),
         {}
     };
 
@@ -131,7 +115,7 @@ void SketchModel::MovePoint(const SketchPoint& point, const gp_Pnt& position)
     m_Context.SetValueProperty(point.position, PositionProperty, position);
 }
 
-bool SketchModel::Evaluate()
+DGContext::EvaluationResult SketchModel::Evaluate()
 {
     return m_Context.Evaluator();
 }
@@ -149,21 +133,6 @@ double SketchModel::GetLength(const SketchSegment& segment) const
 double SketchModel::GetArea(const SketchArea& area) const
 {
     return m_Context.GetValueHandle(area.area).GetProperty<double>(AreaProperty);
-}
-
-ComputerNodeId SketchModel::AddValueRenderNode(ValueId valueId, const std::string& debugName)
-{
-    const auto renderNode = m_Context.AddComputeNode({valueId}, {},
-        [this](const ComputerView& view)
-        {
-            m_Context.GetRender()->Update(view.InId(0));
-        });
-
-    if (!debugName.empty())
-    {
-        m_Context.SetDebugName(renderNode, "render " + debugName);
-    }
-    return renderNode;
 }
 
 ComputerNodeId SketchModel::AddDistanceComputeNode(ValueId startPosition, ValueId endPosition, ValueId outputLength)

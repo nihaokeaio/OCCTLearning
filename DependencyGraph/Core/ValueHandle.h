@@ -8,6 +8,14 @@
 #include <string>
 #include <unordered_map>
 
+enum class ValueRole
+{
+    UserInput,
+    Derived
+};
+
+[[nodiscard]] const char* ToString(ValueRole role);
+
 struct ValueHandle
 {
     using PropertyChangedCallback = std::function<void(ValueHandle& valueHandle,
@@ -56,6 +64,7 @@ struct ValueHandle
     void SetOnSetProperty(PropertyChangedCallback fun);
 
     ValueId m_Id;
+    ValueRole m_Role = ValueRole::UserInput;
     std::unordered_map<std::string, PropertyValue> properties;
     PropertyChangedCallback m_OnSetFun;
 

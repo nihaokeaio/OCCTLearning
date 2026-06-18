@@ -26,15 +26,12 @@ namespace
         std::cout << "[DGTrace] " << message << std::endl;
     }
 
-    bool IsRenderNode(const DGContext* context, const ComputerNodeId& id)
-    {
-        return context != nullptr && context->NodeLabel(id).starts_with("render ");
-    }
 }
 #endif
 
 void GraphExecutor::MarkDirty(ValueId id, const DGContext* context)
 {
+    RecordChangedValue(id);
     if (m_DirtyValues.insert(id).second)
     {
         dirtyQueue.push(id);
@@ -56,10 +53,10 @@ void GraphExecutor::MarkDirty(ValueId id, const DGContext* context)
 #endif
 }
 
-bool GraphExecutor::Evaluate(DGContext* context)
+GraphExecutor::EvaluationResult GraphExecutor::Evaluate(DGContext* context)
 {
     size_t batchIndex = 0;
-    bool hasEvaluatedNode = false;
+    EvaluationResult result;
     ClearFlowTraceState();
     while (!dirtyQueue.empty())
     {
@@ -76,7 +73,7 @@ bool GraphExecutor::Evaluate(DGContext* context)
         BatchNodeSort(context, dirtyNodeQueue, dirtyNodeIds);
         if (!dirtyNodeIds.empty())
         {
-            hasEvaluatedNode = true;
+            result.evaluated = true;
         }
         EvaluateDirtyNodes(context, dirtyNodeQueue, dirtyNodeIds);
 #ifdef DG_ENABLE_TRACE
@@ -87,7 +84,9 @@ bool GraphExecutor::Evaluate(DGContext* context)
 #endif
     }
     EmitFlowSummary(context);
-    return hasEvaluatedNode;
+    result.changedValues = m_ChangedValues;
+    m_ChangedValues.clear();
+    return result;
 }
 
 void GraphExecutor::SetTraceEnabled(bool enabled)
@@ -171,7 +170,7 @@ void GraphExecutor::CollectDirtyNodes(DGContext* context, std::queue<ComputerNod
                 suppressedIter->second.contains(computerNodeId))
             {
 #ifdef DG_ENABLE_TRACE
-                if (m_TraceEnabled && !IsRenderNode(context, computerNodeId))
+                if (m_TraceEnabled)
                 {
                     Trace("SkipNodeSatisfiedInPreviousBatch " + context->NodeLabel(computerNodeId) + " because " +
                         context->ValueLabel(dirtyValueId));
@@ -185,7 +184,7 @@ void GraphExecutor::CollectDirtyNodes(DGContext* context, std::queue<ComputerNod
             {
                 dirtyNodeQueue.push(computerNodeId);
 #ifdef DG_ENABLE_TRACE
-                if (m_TraceEnabled && !IsRenderNode(context, computerNodeId))
+                if (m_TraceEnabled)
                 {
                     Trace("QueueNode " + context->NodeLabel(computerNodeId) + " because " +
                         context->ValueLabel(dirtyValueId));
@@ -195,7 +194,7 @@ void GraphExecutor::CollectDirtyNodes(DGContext* context, std::queue<ComputerNod
 #ifdef DG_ENABLE_TRACE
             else
             {
-                if (m_TraceEnabled && !IsRenderNode(context, computerNodeId))
+                if (m_TraceEnabled)
                 {
                     Trace("SkipNodeAlreadyQueued " + context->NodeLabel(computerNodeId) + " because " +
                         context->ValueLabel(dirtyValueId));
@@ -217,7 +216,7 @@ void GraphExecutor::EvaluateDirtyNodes(DGContext* context, std::queue<ComputerNo
 
         const auto node = context->GetNode(computerNodeId);
 #ifdef DG_ENABLE_TRACE
-        if (m_TraceEnabled && !IsRenderNode(context, computerNodeId))
+        if (m_TraceEnabled)
         {
             Trace("EvaluateNode " + context->NodeLabel(computerNodeId));
         }
@@ -230,6 +229,7 @@ void GraphExecutor::EvaluateDirtyNodes(DGContext* context, std::queue<ComputerNo
             RecordNodeOutputs(computerNodeId, outputIter->second);
             for (const auto& outputValueId : outputIter->second)
             {
+                RecordChangedValue(outputValueId);
                 if (!dependNodeLists.contains(outputValueId))
                 {
 #ifdef DG_ENABLE_TRACE
@@ -435,4 +435,9 @@ void GraphExecutor::EmitFlowSummary(const DGContext* context) const
     {
         m_FlowTraceCallback(lines);
     }
+}
+
+void GraphExecutor::RecordChangedValue(ValueId valueId)
+{
+    m_ChangedValues.insert(valueId);
 }

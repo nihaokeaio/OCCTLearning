@@ -15,8 +15,14 @@ struct GraphExecutor
 {
     using FlowTraceCallback = std::function<void(const std::vector<std::string>&)>;
 
+    struct EvaluationResult
+    {
+        bool evaluated = false;
+        std::unordered_set<ValueId> changedValues;
+    };
+
     void MarkDirty(ValueId id, const DGContext* context = nullptr);
-    bool Evaluate(DGContext* context);
+    EvaluationResult Evaluate(DGContext* context);
     void SetTraceEnabled(bool enabled);
     [[nodiscard]] bool IsTraceEnabled() const;
     void SetFlowTraceCallback(FlowTraceCallback callback);
@@ -54,10 +60,12 @@ private:
     void RecordNodeTrigger(ComputerNodeId nodeId, ValueId triggerValueId);
     void RecordNodeOutputs(ComputerNodeId nodeId, const std::vector<ValueId>& outputs);
     void EmitFlowSummary(const DGContext* context) const;
+    void RecordChangedValue(ValueId valueId);
 
 private:
     std::queue<ValueId> dirtyQueue;
     std::unordered_set<ValueId> m_DirtyValues;
+    std::unordered_set<ValueId> m_ChangedValues;
     bool m_TraceEnabled = false;
     FlowTraceCallback m_FlowTraceCallback;
     std::unordered_map<ComputerNodeId, std::unordered_set<ValueId>> m_NodeTriggerValues;

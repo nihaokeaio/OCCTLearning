@@ -2,7 +2,6 @@
 
 #include "ComputerNode.h"
 #include "GraphExecutor.h"
-#include "Render.h"
 #include "ValueHandle.h"
 
 #include <functional>
@@ -15,6 +14,8 @@
 
 struct DGContext
 {
+    using EvaluationResult = GraphExecutor::EvaluationResult;
+
     DGContext();
 
     [[nodiscard]] ComputerNode* GetComputerNode(const ComputerNodeId& id);
@@ -24,22 +25,26 @@ struct DGContext
 
     [[nodiscard]] ComputerNode* GetNode(const ComputerNodeId& nodeId);
 
-    [[nodiscard]] Render* GetRender();
-
-
     ComputerNodeId AddComputeNode(const std::vector<ValueId>& inputs,
                                   const std::vector<ValueId>& outputs,
                                   ComputerNode::ComputeFunc computeFunc);
 
 
     template <class T>
-    ValueId CreateValue(const std::string& propertyName, const T& initialValue);
+    ValueId CreateValue(const std::string& propertyName, const T& initialValue,
+                        ValueRole role = ValueRole::UserInput);
+
+    template <class T>
+    ValueId CreateInputValue(const std::string& propertyName, const T& initialValue);
+
+    template <class T>
+    ValueId CreateDerivedValue(const std::string& propertyName, const T& initialValue);
 
     template <class T>
     void SetValueProperty(const ValueId& valueId, const std::string& propertyName, const T& value);
 
 
-    bool Evaluator();
+    EvaluationResult Evaluator();
     void SetTraceEnabled(bool enabled);
     [[nodiscard]] bool IsTraceEnabled() const;
     void SetFlowTraceCallback(GraphExecutor::FlowTraceCallback callback);
@@ -49,6 +54,8 @@ public:
     void DumpGraph(std::ostream& out) const;
     [[nodiscard]] std::string ValueLabel(const ValueId& id) const;
     [[nodiscard]] std::string NodeLabel(const ComputerNodeId& id) const;
+    [[nodiscard]] ValueRole GetValueRole(const ValueId& id) const;
+    void SetValueRole(const ValueId& id, ValueRole role);
     void SetDebugName(const ValueId& id, std::string name);
     void SetDebugName(const ComputerNodeId& id, std::string name);
 
@@ -69,16 +76,28 @@ private:
     std::unordered_map<ComputerNodeId, std::unique_ptr<ComputerNode>> m_Nodes;
     std::unordered_map<ValueId, std::string> m_ValueDebugNames;
     std::unordered_map<ComputerNodeId, std::string> m_NodeDebugNames;
-    std::unique_ptr<Render> m_Render;
     std::unique_ptr<GraphExecutor> m_GraphExecutor;
 };
 
 template <class T>
-ValueId DGContext::CreateValue(const std::string& propertyName, const T& initialValue)
+ValueId DGContext::CreateValue(const std::string& propertyName, const T& initialValue, ValueRole role)
 {
     auto valueHandle = std::make_unique<ValueHandle>();
+    valueHandle->m_Role = role;
     valueHandle->AddProperty(propertyName, initialValue);
     return AddValueHandle(std::move(valueHandle));
+}
+
+template <class T>
+ValueId DGContext::CreateInputValue(const std::string& propertyName, const T& initialValue)
+{
+    return CreateValue(propertyName, initialValue, ValueRole::UserInput);
+}
+
+template <class T>
+ValueId DGContext::CreateDerivedValue(const std::string& propertyName, const T& initialValue)
+{
+    return CreateValue(propertyName, initialValue, ValueRole::Derived);
 }
 
 template <class T>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DependencyGraph/DGContext.h"
+#include "DependencyGraph/Core/DGContext.h"
 
 #include <gp_Pnt.hxx>
 
@@ -46,9 +46,6 @@ public:
                                    const std::string& debugName = {});
     SketchArea CreateCircleAreaFromRadius(const SketchSegment& radius,
                                           const std::string& debugName = {});
-    ComputerNodeId AddPointRenderNode(const SketchPoint& point, const std::string& debugName = {});
-    ComputerNodeId AddLengthRenderNode(const SketchSegment& segment, const std::string& debugName = {});
-    ComputerNodeId AddDistanceRenderNode(const SketchDistanceDimension& dimension, const std::string& debugName = {});
 
     // 业务层对象
     SketchDistanceDimension CreateDistanceDimension(const SketchPoint& start, const SketchPoint& end,
@@ -56,14 +53,13 @@ public:
     [[nodiscard]] double GetDistance(const SketchDistanceDimension& dimension) const;
 
     void MovePoint(const SketchPoint& point, const gp_Pnt& position);
-    bool Evaluate();
+    DGContext::EvaluationResult Evaluate();
 
     [[nodiscard]] gp_Pnt GetPosition(const SketchPoint& point) const;
     [[nodiscard]] double GetLength(const SketchSegment& segment) const;
     [[nodiscard]] double GetArea(const SketchArea& area) const;
 
 private:
-    ComputerNodeId AddValueRenderNode(ValueId valueId, const std::string& debugName);
     ComputerNodeId AddDistanceComputeNode(ValueId startPosition, ValueId endPosition, ValueId outputLength);
 
     static constexpr const char* PositionProperty = "position";

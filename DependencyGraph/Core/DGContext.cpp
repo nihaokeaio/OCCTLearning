@@ -1,7 +1,6 @@
 #include "DGContext.h"
 
 #include <queue>
-#include <ranges>
 #include <sstream>
 #include <unordered_set>
 #include <utility>
@@ -11,7 +10,6 @@
 DGContext::DGContext()
 {
     m_GraphExecutor = std::make_unique<GraphExecutor>();
-    m_Render = std::make_unique<Render>();
 }
 
 ComputerNode* DGContext::GetComputerNode(const ComputerNodeId& id)
@@ -37,11 +35,6 @@ const ValueHandle& DGContext::GetValueHandle(const ValueId& id) const
 ComputerNode* DGContext::GetNode(const ComputerNodeId& nodeId)
 {
     return m_Nodes.at(nodeId).get();
-}
-
-Render* DGContext::GetRender()
-{
-    return m_Render.get();
 }
 
 ComputerNodeId DGContext::AddComputerNode(std::unique_ptr<ComputerNode>&& node, const std::vector<ValueId>& inputs,
@@ -76,6 +69,7 @@ ComputerNodeId DGContext::AddComputerNode(std::unique_ptr<ComputerNode>&& node, 
     node->m_Outputs = outputs;
     for (const auto& outputId : outputs)
     {
+        SetValueRole(outputId, ValueRole::Derived);
         m_GraphExecutor->AddNodeOutput(node->m_Id, outputId);
     }
     const auto id = node->m_Id;
@@ -169,9 +163,9 @@ void DGContext::DumpGraph(std::ostream& out) const
 {
     out << "DependencyGraph\n";
     out << "Values:\n";
-    for (const auto& id : m_Values | std::views::keys)
+    for (const auto& [id, value] : m_Values)
     {
-        out << "  " << ValueLabel(id) << " (id=" << id.m_Id << ")\n";
+        out << "  " << ValueLabel(id) << " (" << ToString(value->m_Role) << ", id=" << id.m_Id << ")\n";
     }
 
     out << "Nodes:\n";
@@ -236,6 +230,16 @@ std::string DGContext::NodeLabel(const ComputerNodeId& id) const
     return std::string("Node#") + std::to_string(id.m_Id);
 }
 
+ValueRole DGContext::GetValueRole(const ValueId& id) const
+{
+    return m_Values.at(id)->m_Role;
+}
+
+void DGContext::SetValueRole(const ValueId& id, ValueRole role)
+{
+    m_Values.at(id)->m_Role = role;
+}
+
 void DGContext::SetDebugName(const ValueId& id, std::string name)
 {
     m_ValueDebugNames.insert_or_assign(id, std::move(name));
@@ -246,7 +250,7 @@ void DGContext::SetDebugName(const ComputerNodeId& id, std::string name)
     m_NodeDebugNames.insert_or_assign(id, std::move(name));
 }
 
-bool DGContext::Evaluator()
+DGContext::EvaluationResult DGContext::Evaluator()
 {
     return m_GraphExecutor->Evaluate(this);
 }

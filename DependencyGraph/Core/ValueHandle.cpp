@@ -2,6 +2,18 @@
 
 #include <utility>
 
+const char* ToString(ValueRole role)
+{
+    switch (role)
+    {
+    case ValueRole::UserInput:
+        return "UserInput";
+    case ValueRole::Derived:
+        return "Derived";
+    }
+    return "Unknown";
+}
+
 void ValueHandle::AddProperty(const std::string& name, const PropertyValue& initialValue)
 {
     properties.insert_or_assign(name, initialValue);

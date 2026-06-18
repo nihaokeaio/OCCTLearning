@@ -11,6 +11,7 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 namespace
 {
@@ -68,7 +69,7 @@ void DependencyGraphManager::InitializeDemoScene(const Handle(AIS_InteractiveCon
     BuildDemoGraph();
     m_Sketch->Evaluate();
     DisplayScene();
-    m_DirtyRenderValues.clear();
+    m_ChangedValues.clear();
 }
 
 void DependencyGraphManager::RefreshScene()
@@ -92,7 +93,7 @@ void DependencyGraphManager::RefreshScene()
     }
 
     m_AisContext->UpdateCurrentViewer();
-    m_DirtyRenderValues.clear();
+    m_ChangedValues.clear();
 }
 
 void DependencyGraphManager::RenderGuiControls()
@@ -150,6 +151,18 @@ void DependencyGraphManager::RenderGuiControls()
         }
     }
 
+    ImGui::Separator();
+    if (ImGui::CollapsingHeader("Value Bindings"))
+    {
+        for (const auto& [valueId, externalKey] : m_Bindings.ValueToExternal())
+        {
+            ImGui::TextWrapped("%s [%s] -> %s",
+                               m_Context.ValueLabel(valueId).c_str(),
+                               ToString(m_Context.GetValueRole(valueId)),
+                               externalKey.ToString().c_str());
+        }
+    }
+
     ImGui::End();
 }
 
@@ -201,10 +214,6 @@ bool DependencyGraphManager::IsDraggingPoint() const
 void DependencyGraphManager::BuildDemoGraph()
 {
     m_Sketch = std::make_unique<SketchModel>(m_Context);
-    m_Context.GetRender()->SetUpdateCallback([this](ValueId valueId)
-    {
-        m_DirtyRenderValues.insert(valueId);
-    });
     m_Context.SetFlowTraceCallback([this](const std::vector<std::string>& lines)
     {
         m_FlowLogLines = lines;
@@ -213,32 +222,35 @@ void DependencyGraphManager::BuildDemoGraph()
     m_Points.clear();
     m_Segments.clear();
     m_DistanceDimensions.clear();
-    m_DirtyRenderValues.clear();
+    m_ChangedValues.clear();
     m_FlowLogLines.clear();
+    m_Bindings.Clear();
 
     const auto j0 = m_Sketch->CreatePoint(gp_Pnt(0, 0, 0), "j0");
     const auto j1 = m_Sketch->CreatePoint(gp_Pnt(100, 0, 0), "j1");
     const auto j2 = m_Sketch->CreatePoint(gp_Pnt(100, 100, 0), "j2");
+    RegisterDemoBinding(j0.position, "j0", "position");
+    RegisterDemoBinding(j1.position, "j1", "position");
+    RegisterDemoBinding(j2.position, "j2", "position");
     m_Points.push_back({"j0", j0, {}});
     m_Points.push_back({"j1", j1, {}});
     m_Points.push_back({"j2", j2, {}});
 
     const auto s0 = m_Sketch->CreateSegment(j0, j1, "s0");
     const auto s1 = m_Sketch->CreateSegment(j1, j2, "s1");
+    RegisterDemoBinding(s0.length, "s0", "length");
+    RegisterDemoBinding(s1.length, "s1", "length");
     m_Segments.push_back({s0, {}});
     m_Segments.push_back({s1, {}});
 
     const auto d0 = m_Sketch->CreateDistanceDimension(j0, j1, "d0");
+    RegisterDemoBinding(d0.measuredLength, "d0", "length");
     m_DistanceDimensions.push_back({d0, {}});
 
-    m_Sketch->CreateRectangleArea(s0, s1, "rect");
-    m_Sketch->CreateCircleAreaFromRadius(s0, "circle");
-    m_Sketch->AddPointRenderNode(j0, "j0");
-    m_Sketch->AddPointRenderNode(j1, "j1");
-    m_Sketch->AddPointRenderNode(j2, "j2");
-    m_Sketch->AddLengthRenderNode(s0, "s0");
-    m_Sketch->AddLengthRenderNode(s1, "s1");
-    m_Sketch->AddDistanceRenderNode(d0, "d0");
+    const auto rectArea = m_Sketch->CreateRectangleArea(s0, s1, "rect");
+    const auto circleArea = m_Sketch->CreateCircleAreaFromRadius(s0, "circle");
+    RegisterDemoBinding(rectArea.area, "rect", "area");
+    RegisterDemoBinding(circleArea.area, "circle", "area");
 
     // 初始化阶段也走 dirty/evaluate，让派生值和真实编辑路径保持一致。
     m_Sketch->MovePoint(j0, m_Sketch->GetPosition(j0));
@@ -253,10 +265,11 @@ void DependencyGraphManager::EvaluateAndRefreshScene()
         return;
     }
 
-    const bool evaluated = m_Sketch->Evaluate();
-    if (evaluated && !m_DirtyRenderValues.empty())
+    const auto result = m_Sketch->Evaluate();
+    if (result.evaluated && !result.changedValues.empty())
     {
-        RefreshDirtyScene();
+        m_ChangedValues = result.changedValues;
+        RefreshChangedScene();
     }
 }
 
@@ -342,18 +355,18 @@ bool DependencyGraphManager::ProjectScreenToSketchPlane(
     return true;
 }
 
-void DependencyGraphManager::RefreshDirtyScene()
+void DependencyGraphManager::RefreshChangedScene()
 {
     if (m_AisContext.IsNull() || m_Sketch == nullptr)
     {
         return;
     }
 
-    for (const auto& dirtyValueId : m_DirtyRenderValues)
+    for (const auto& changedValueId : m_ChangedValues)
     {
         for (auto& point : m_Points)
         {
-            if (point.point.position == dirtyValueId)
+            if (point.point.position == changedValueId)
             {
                 RefreshPoint(point);
             }
@@ -361,7 +374,7 @@ void DependencyGraphManager::RefreshDirtyScene()
 
         for (auto& segment : m_Segments)
         {
-            if (segment.segment.length == dirtyValueId)
+            if (segment.segment.length == changedValueId)
             {
                 RefreshSegment(segment);
             }
@@ -369,15 +382,23 @@ void DependencyGraphManager::RefreshDirtyScene()
 
         for (auto& dimension : m_DistanceDimensions)
         {
-            if (dimension.dimension.measuredLength == dirtyValueId)
+            if (dimension.dimension.measuredLength == changedValueId)
             {
                 RefreshDistanceDimension(dimension);
             }
         }
     }
 
-    m_DirtyRenderValues.clear();
+    m_ChangedValues.clear();
     m_AisContext->UpdateCurrentViewer();
+}
+
+void DependencyGraphManager::RegisterDemoBinding(
+    ValueId valueId,
+    std::string objectId,
+    std::string propertyKey)
+{
+    m_Bindings.RegisterBinding(valueId, {std::move(objectId), std::move(propertyKey)});
 }
 
 void DependencyGraphManager::DisplayScene()
@@ -409,7 +430,7 @@ void DependencyGraphManager::DisplayScene()
     }
 
     m_AisContext->UpdateCurrentViewer();
-    m_DirtyRenderValues.clear();
+    m_ChangedValues.clear();
 }
 
 void DependencyGraphManager::RefreshPoint(RenderedPoint& renderedPoint)

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "DGContext.h"
+#include "DependencyGraph/Binding/ValueBindingRegistry.h"
+#include "DependencyGraph/Core/DGContext.h"
 #include "Sketch/SketchModel.h"
 
 #include <AIS_InteractiveContext.hxx>
@@ -52,16 +53,18 @@ private:
     void MovePoint(size_t index, const gp_Pnt& position);
     bool TryPickPointAtScreen(const Handle(V3d_View)& view, int screenX, int screenY, size_t& pointIndex) const;
     bool ProjectScreenToSketchPlane(const Handle(V3d_View)& view, int screenX, int screenY, gp_Pnt& point) const;
-    void RefreshDirtyScene();
+    void RefreshChangedScene();
     void RefreshPoint(RenderedPoint& renderedPoint);
     void RefreshSegment(RenderedSegment& renderedSegment);
     void RefreshDistanceDimension(RenderedDistanceDimension& renderedDimension);
+    void RegisterDemoBinding(ValueId valueId, std::string objectId, std::string propertyKey);
 
 private:
     DGContext m_Context;
+    ValueBindingRegistry m_Bindings;
     std::unique_ptr<SketchModel> m_Sketch;
     Handle(AIS_InteractiveContext) m_AisContext;
-    std::unordered_set<ValueId> m_DirtyRenderValues;
+    std::unordered_set<ValueId> m_ChangedValues;
     size_t m_DraggingPointIndex = static_cast<size_t>(-1);
     bool m_TraceEnabledBeforeDrag = true;
     std::vector<std::string> m_FlowLogLines;
