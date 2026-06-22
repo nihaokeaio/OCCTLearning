@@ -3,6 +3,8 @@
 #include "ComputerNode.h"
 #include "DGContext.h"
 
+#include <algorithm>
+#include <queue>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -112,6 +114,94 @@ void GraphExecutor::AddDependentNode(ValueId valueId, ComputerNodeId nodeId)
 void GraphExecutor::AddNodeOutput(ComputerNodeId nodeId, ValueId valueId)
 {
     nodeOutputs[nodeId].push_back(valueId);
+    valueProducers.insert_or_assign(valueId, nodeId);
+}
+
+void GraphExecutor::RemoveNode(ComputerNodeId nodeId)
+{
+    for (auto iter = dependNodeLists.begin(); iter != dependNodeLists.end();)
+    {
+        auto& nodes = iter->second;
+        std::erase(nodes, nodeId);
+        if (nodes.empty())
+        {
+            iter = dependNodeLists.erase(iter);
+        }
+        else
+        {
+            ++iter;
+        }
+    }
+
+    if (const auto outputsIter = nodeOutputs.find(nodeId); outputsIter != nodeOutputs.end())
+    {
+        for (const auto& outputValueId : outputsIter->second)
+        {
+            if (const auto producerIter = valueProducers.find(outputValueId);
+                producerIter != valueProducers.end() && producerIter->second == nodeId)
+            {
+                valueProducers.erase(producerIter);
+            }
+        }
+        nodeOutputs.erase(outputsIter);
+    }
+
+    m_NodeTriggerValues.erase(nodeId);
+    for (auto iter = m_SuppressedConsumers.begin(); iter != m_SuppressedConsumers.end();)
+    {
+        iter->second.erase(nodeId);
+        if (iter->second.empty())
+        {
+            iter = m_SuppressedConsumers.erase(iter);
+        }
+        else
+        {
+            ++iter;
+        }
+    }
+
+    std::erase_if(m_FlowEvents, [nodeId](const FlowEvent& event)
+    {
+        return event.node == nodeId;
+    });
+}
+
+void GraphExecutor::RemoveValue(ValueId valueId)
+{
+    dependNodeLists.erase(valueId);
+    valueProducers.erase(valueId);
+    m_DirtyValues.erase(valueId);
+    m_ChangedValues.erase(valueId);
+    m_SuppressedConsumers.erase(valueId);
+    RemoveDirtyValue(valueId);
+
+    for (auto& [nodeId, outputs] : nodeOutputs)
+    {
+        std::erase(outputs, valueId);
+    }
+    for (auto& [nodeId, triggerValues] : m_NodeTriggerValues)
+    {
+        triggerValues.erase(valueId);
+    }
+    std::erase_if(m_FlowEvents, [valueId](const FlowEvent& event)
+    {
+        return event.trigger == valueId ||
+            std::find(event.outputs.begin(), event.outputs.end(), valueId) != event.outputs.end();
+    });
+}
+
+void GraphExecutor::Clear()
+{
+    std::queue<ValueId> emptyDirtyQueue;
+    dirtyQueue.swap(emptyDirtyQueue);
+    m_DirtyValues.clear();
+    m_ChangedValues.clear();
+    m_NodeTriggerValues.clear();
+    m_FlowEvents.clear();
+    m_SuppressedConsumers.clear();
+    dependNodeLists.clear();
+    nodeOutputs.clear();
+    valueProducers.clear();
 }
 
 const std::vector<ComputerNodeId>* GraphExecutor::FindDependentNodes(ValueId valueId) const
@@ -128,6 +218,16 @@ const std::vector<ValueId>* GraphExecutor::FindNodeOutputs(ComputerNodeId nodeId
 {
     const auto iter = nodeOutputs.find(nodeId);
     if (iter == nodeOutputs.end())
+    {
+        return nullptr;
+    }
+    return &iter->second;
+}
+
+const ComputerNodeId* GraphExecutor::FindProducerNode(ValueId valueId) const
+{
+    const auto iter = valueProducers.find(valueId);
+    if (iter == valueProducers.end())
     {
         return nullptr;
     }
@@ -440,4 +540,19 @@ void GraphExecutor::EmitFlowSummary(const DGContext* context) const
 void GraphExecutor::RecordChangedValue(ValueId valueId)
 {
     m_ChangedValues.insert(valueId);
+}
+
+void GraphExecutor::RemoveDirtyValue(ValueId valueId)
+{
+    std::queue<ValueId> retainedValues;
+    while (!dirtyQueue.empty())
+    {
+        const auto currentValueId = dirtyQueue.front();
+        dirtyQueue.pop();
+        if (!(currentValueId == valueId))
+        {
+            retainedValues.push(currentValueId);
+        }
+    }
+    dirtyQueue.swap(retainedValues);
 }

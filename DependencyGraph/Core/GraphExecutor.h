@@ -29,9 +29,13 @@ struct GraphExecutor
 
     void AddDependentNode(ValueId valueId, ComputerNodeId nodeId);
     void AddNodeOutput(ComputerNodeId nodeId, ValueId valueId);
+    void RemoveNode(ComputerNodeId nodeId);
+    void RemoveValue(ValueId valueId);
+    void Clear();
 
     [[nodiscard]] const std::vector<ComputerNodeId>* FindDependentNodes(ValueId valueId) const;
     [[nodiscard]] const std::vector<ValueId>* FindNodeOutputs(ComputerNodeId nodeId) const;
+    [[nodiscard]] const ComputerNodeId* FindProducerNode(ValueId valueId) const;
 
 private:
     struct FlowEvent
@@ -61,6 +65,7 @@ private:
     void RecordNodeOutputs(ComputerNodeId nodeId, const std::vector<ValueId>& outputs);
     void EmitFlowSummary(const DGContext* context) const;
     void RecordChangedValue(ValueId valueId);
+    void RemoveDirtyValue(ValueId valueId);
 
 private:
     std::queue<ValueId> dirtyQueue;
@@ -75,4 +80,5 @@ private:
     std::unordered_map<ValueId, std::unordered_set<ComputerNodeId>> m_SuppressedConsumers;
     std::unordered_map<ValueId, std::vector<ComputerNodeId>> dependNodeLists;
     std::unordered_map<ComputerNodeId, std::vector<ValueId>> nodeOutputs;
+    std::unordered_map<ValueId, ComputerNodeId> valueProducers;
 };

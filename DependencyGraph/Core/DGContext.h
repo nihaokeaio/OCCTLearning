@@ -20,6 +20,13 @@ struct DGContext
 
     [[nodiscard]] ComputerNode* GetComputerNode(const ComputerNodeId& id);
 
+    [[nodiscard]] bool HasValue(const ValueId& id) const;
+    [[nodiscard]] bool HasNode(const ComputerNodeId& id) const;
+    [[nodiscard]] ValueHandle* FindValueHandle(const ValueId& id);
+    [[nodiscard]] const ValueHandle* FindValueHandle(const ValueId& id) const;
+    [[nodiscard]] ComputerNode* FindNode(const ComputerNodeId& nodeId);
+    [[nodiscard]] const ComputerNode* FindNode(const ComputerNodeId& nodeId) const;
+
     ValueHandle& GetValueHandle(const ValueId& id);
     [[nodiscard]] const ValueHandle& GetValueHandle(const ValueId& id) const;
 
@@ -41,9 +48,20 @@ struct DGContext
     ValueId CreateDerivedValue(const std::string& propertyName, const T& initialValue);
 
     template <class T>
+    [[nodiscard]] T GetValueProperty(const ValueId& valueId, const std::string& propertyName) const;
+
+    template <class T>
+    void SetInputValueProperty(const ValueId& valueId, const std::string& propertyName, const T& value);
+
+    template <class T>
     void SetValueProperty(const ValueId& valueId, const std::string& propertyName, const T& value);
 
 
+    [[nodiscard]] bool RemoveValue(const ValueId& valueId);
+    [[nodiscard]] bool RemoveComputeNode(const ComputerNodeId& nodeId);
+    void Clear();
+
+    EvaluationResult Evaluate();
     EvaluationResult Evaluator();
     void SetTraceEnabled(bool enabled);
     [[nodiscard]] bool IsTraceEnabled() const;
@@ -107,6 +125,33 @@ void DGContext::SetValueProperty(const ValueId& valueId, const std::string& prop
     if (iter == m_Values.end())
     {
         throw std::runtime_error("ValueHandle does not exist");
+    }
+    SetInputValueProperty(valueId, propertyName, value);
+}
+
+template <class T>
+T DGContext::GetValueProperty(const ValueId& valueId, const std::string& propertyName) const
+{
+    const auto iter = m_Values.find(valueId);
+    if (iter == m_Values.end())
+    {
+        throw std::runtime_error("ValueHandle does not exist");
+    }
+    return iter->second->GetProperty<T>(propertyName);
+}
+
+template <class T>
+void DGContext::SetInputValueProperty(const ValueId& valueId, const std::string& propertyName, const T& value)
+{
+    const auto iter = m_Values.find(valueId);
+    if (iter == m_Values.end())
+    {
+        throw std::runtime_error("ValueHandle does not exist");
+    }
+    if (iter->second->m_Role != ValueRole::UserInput)
+    {
+        throw std::runtime_error("Only user input values can be changed through DGContext external API: " +
+                                 ValueLabel(valueId));
     }
     iter->second->SetProperty(propertyName, value);
     m_GraphExecutor->MarkDirty(valueId, this);

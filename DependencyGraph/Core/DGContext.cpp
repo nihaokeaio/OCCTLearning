@@ -14,12 +14,57 @@ DGContext::DGContext()
 
 ComputerNode* DGContext::GetComputerNode(const ComputerNodeId& id)
 {
-    const auto iter = m_Nodes.find(id);
-    if (iter != m_Nodes.end())
+    return FindNode(id);
+}
+
+bool DGContext::HasValue(const ValueId& id) const
+{
+    return m_Values.contains(id);
+}
+
+bool DGContext::HasNode(const ComputerNodeId& id) const
+{
+    return m_Nodes.contains(id);
+}
+
+ValueHandle* DGContext::FindValueHandle(const ValueId& id)
+{
+    const auto iter = m_Values.find(id);
+    if (iter == m_Values.end())
     {
-        return iter->second.get();
+        return nullptr;
     }
-    return nullptr;
+    return iter->second.get();
+}
+
+const ValueHandle* DGContext::FindValueHandle(const ValueId& id) const
+{
+    const auto iter = m_Values.find(id);
+    if (iter == m_Values.end())
+    {
+        return nullptr;
+    }
+    return iter->second.get();
+}
+
+ComputerNode* DGContext::FindNode(const ComputerNodeId& nodeId)
+{
+    const auto iter = m_Nodes.find(nodeId);
+    if (iter == m_Nodes.end())
+    {
+        return nullptr;
+    }
+    return iter->second.get();
+}
+
+const ComputerNode* DGContext::FindNode(const ComputerNodeId& nodeId) const
+{
+    const auto iter = m_Nodes.find(nodeId);
+    if (iter == m_Nodes.end())
+    {
+        return nullptr;
+    }
+    return iter->second.get();
 }
 
 ValueHandle& DGContext::GetValueHandle(const ValueId& id)
@@ -47,11 +92,20 @@ ComputerNodeId DGContext::AddComputerNode(std::unique_ptr<ComputerNode>&& node, 
             throw std::runtime_error("Input value does not exist: " + std::to_string(inputId.m_Id));
         }
     }
+    std::unordered_set<ValueId> uniqueOutputs;
     for (const auto& outputId : outputs)
     {
         if (!m_Values.contains(outputId))
         {
             throw std::runtime_error("Output value does not exist: " + std::to_string(outputId.m_Id));
+        }
+        if (!uniqueOutputs.insert(outputId).second)
+        {
+            throw std::runtime_error("Duplicate output value in compute node: " + ValueLabel(outputId));
+        }
+        if (m_GraphExecutor->FindProducerNode(outputId) != nullptr)
+        {
+            throw std::runtime_error("Output value already has a producer: " + ValueLabel(outputId));
         }
     }
 
@@ -250,9 +304,69 @@ void DGContext::SetDebugName(const ComputerNodeId& id, std::string name)
     m_NodeDebugNames.insert_or_assign(id, std::move(name));
 }
 
-DGContext::EvaluationResult DGContext::Evaluator()
+bool DGContext::RemoveValue(const ValueId& valueId)
+{
+    if (!m_Values.contains(valueId))
+    {
+        return false;
+    }
+
+    const auto dependentNodes = m_GraphExecutor->FindDependentNodes(valueId);
+    if (dependentNodes != nullptr && !dependentNodes->empty())
+    {
+        throw std::runtime_error("Cannot remove value with dependent compute nodes: " + ValueLabel(valueId));
+    }
+    if (m_GraphExecutor->FindProducerNode(valueId) != nullptr)
+    {
+        throw std::runtime_error("Cannot remove value produced by a compute node: " + ValueLabel(valueId));
+    }
+
+    m_GraphExecutor->RemoveValue(valueId);
+    m_ValueDebugNames.erase(valueId);
+    m_Values.erase(valueId);
+    return true;
+}
+
+bool DGContext::RemoveComputeNode(const ComputerNodeId& nodeId)
+{
+    const auto iter = m_Nodes.find(nodeId);
+    if (iter == m_Nodes.end())
+    {
+        return false;
+    }
+
+    const auto outputs = iter->second->m_Outputs;
+    m_GraphExecutor->RemoveNode(nodeId);
+    m_NodeDebugNames.erase(nodeId);
+    m_Nodes.erase(iter);
+
+    for (const auto& outputId : outputs)
+    {
+        if (m_Values.contains(outputId) && m_GraphExecutor->FindProducerNode(outputId) == nullptr)
+        {
+            SetValueRole(outputId, ValueRole::UserInput);
+        }
+    }
+    return true;
+}
+
+void DGContext::Clear()
+{
+    m_Values.clear();
+    m_Nodes.clear();
+    m_ValueDebugNames.clear();
+    m_NodeDebugNames.clear();
+    m_GraphExecutor->Clear();
+}
+
+DGContext::EvaluationResult DGContext::Evaluate()
 {
     return m_GraphExecutor->Evaluate(this);
+}
+
+DGContext::EvaluationResult DGContext::Evaluator()
+{
+    return Evaluate();
 }
 
 void DGContext::SetTraceEnabled(bool enabled)

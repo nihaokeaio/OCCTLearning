@@ -213,6 +213,7 @@ bool DependencyGraphManager::IsDraggingPoint() const
 
 void DependencyGraphManager::BuildDemoGraph()
 {
+    m_Context.Clear();
     m_Sketch = std::make_unique<SketchModel>(m_Context);
     m_Context.SetFlowTraceCallback([this](const std::vector<std::string>& lines)
     {

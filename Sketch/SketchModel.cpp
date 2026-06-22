@@ -107,32 +107,32 @@ SketchDistanceDimension SketchModel::CreateDistanceDimension(const SketchPoint& 
 
 double SketchModel::GetDistance(const SketchDistanceDimension& dimension) const
 {
-    return m_Context.GetValueHandle(dimension.measuredLength).GetProperty<double>(LengthProperty);
+    return m_Context.GetValueProperty<double>(dimension.measuredLength, LengthProperty);
 }
 
 void SketchModel::MovePoint(const SketchPoint& point, const gp_Pnt& position)
 {
-    m_Context.SetValueProperty(point.position, PositionProperty, position);
+    m_Context.SetInputValueProperty(point.position, PositionProperty, position);
 }
 
 DGContext::EvaluationResult SketchModel::Evaluate()
 {
-    return m_Context.Evaluator();
+    return m_Context.Evaluate();
 }
 
 gp_Pnt SketchModel::GetPosition(const SketchPoint& point) const
 {
-    return m_Context.GetValueHandle(point.position).GetProperty<gp_Pnt>(PositionProperty);
+    return m_Context.GetValueProperty<gp_Pnt>(point.position, PositionProperty);
 }
 
 double SketchModel::GetLength(const SketchSegment& segment) const
 {
-    return m_Context.GetValueHandle(segment.length).GetProperty<double>(LengthProperty);
+    return m_Context.GetValueProperty<double>(segment.length, LengthProperty);
 }
 
 double SketchModel::GetArea(const SketchArea& area) const
 {
-    return m_Context.GetValueHandle(area.area).GetProperty<double>(AreaProperty);
+    return m_Context.GetValueProperty<double>(area.area, AreaProperty);
 }
 
 ComputerNodeId SketchModel::AddDistanceComputeNode(ValueId startPosition, ValueId endPosition, ValueId outputLength)
