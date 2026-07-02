@@ -5,6 +5,7 @@
 
 
 #pragma once
+#include "CommonTraits.h"
 #include <functional>
 #include <iostream>
 #include <vector>
@@ -57,10 +58,14 @@ namespace Version2
         void connect(const std::shared_ptr<T>& object, void (T::*method)(Args... args))
         {
             Slot s;
+            std::weak_ptr<T> weakObject = object;
             s.object = object;
-            s.fun = [object,method](Args... args)
+            s.fun = [weakObject,method](Args... args)
             {
-                (object.get()->*method)(args...);
+                if (auto obj = weakObject.lock())
+                {
+                    (obj.get()->*method)(args...);
+                }
             };
             slots.push_back(s);
         }
@@ -71,7 +76,7 @@ namespace Version2
             {
                 if (it->object.expired())
                 {
-                    slots.erase(it);
+                    it = slots.erase(it);
                 }
                 else
                 {
@@ -149,10 +154,14 @@ namespace Version3
         Connection connect(const std::shared_ptr<T>& object, void (T::*method)(Args... args))
         {
             auto s = std::make_shared<MemberSlot<Args...>>();
+            std::weak_ptr<T> weakObject = object;
             s->object = object;
-            s->fun = [object,method](Args... args)
+            s->fun = [weakObject,method](Args... args)
             {
-                (object.get()->*method)(args...);
+                if (auto obj = weakObject.lock())
+                {
+                    (obj.get()->*method)(args...);
+                }
             };
             slots.push_back(s);
             return Connection([this,s]()
@@ -179,7 +188,7 @@ namespace Version3
             {
                 if (!(*it)->isAlive())
                 {
-                    slots.erase(it);
+                    it = slots.erase(it);
                 }
                 else
                 {
@@ -257,10 +266,14 @@ namespace Version4
         Connection connect(const std::shared_ptr<T>& object, void (T::*method)(Args... args))
         {
             auto s = std::make_shared<MemberSlot<Args...>>();
+            std::weak_ptr<T> weakObject = object;
             s->object = object;
-            s->fun = [object,method](Args... args)
+            s->fun = [weakObject,method](Args... args)
             {
-                (object.get()->*method)(args...);
+                if (auto obj = weakObject.lock())
+                {
+                    (obj.get()->*method)(args...);
+                }
             };
             slots.push_back(s);
             return Connection([this,s]()
@@ -287,7 +300,7 @@ namespace Version4
             {
                 if (!(*it)->isAlive())
                 {
-                    slots.erase(it);
+                    it = slots.erase(it);
                 }
                 else
                 {
@@ -381,24 +394,7 @@ namespace Version4
 
 namespace Version5
 {
-    class Connection
-    {
-    public:
-        explicit Connection(const std::function<void()>& f): disConnectFun(f)
-        {
-        }
-
-        void disConnect() const
-        {
-            if (disConnectFun)
-            {
-                disConnectFun();
-            }
-        }
-
-    private:
-        std::function<void()> disConnectFun;
-    };
+    using Connection = Version4::Connection;
 
     class Trackable
     {
@@ -434,25 +430,6 @@ namespace Version5
 
         using Signature = void(Args...);
         using ArgsTuple = std::tuple<Args...>;
-        ///类成员函数
-        template <class T>
-        std::shared_ptr<Connection> connect(const std::shared_ptr<T>& object, void (T::*method)(Args... args))
-        {
-            auto s = std::make_shared<Slot>();
-            auto conn = std::make_shared<Connection>([this,s]()
-            {
-                slots.erase(std::remove(slots.begin(), slots.end(), s), slots.end());
-            });
-
-            s->fun = [object,method](Args... args)
-            {
-                (object.get()->*method)(args...);
-            };
-            s->connection = conn.get();
-            slots.push_back(s);
-            static_cast<Trackable>(object).addConnection(conn);
-            return conn;
-        }
 
         ///匿名函数
         std::shared_ptr<Connection> connect(const std::function<void(Args... args)>& f)
@@ -478,42 +455,106 @@ namespace Version5
         std::vector<std::shared_ptr<Slot>> slots{};
     };
 
-    ///类型提取器
-    template <typename T>
-    struct FunctionTraits;
-
-    ///普通函数
-    template <typename R, typename... Args>
-    struct FunctionTraits<R(*)(Args...)>
+    template <typename Sender, typename SignalType, typename Receiver, typename SlotType>
+    std::shared_ptr<Connection> connect(Sender* sender, SignalType signal, Receiver* receiver, SlotType slot)
     {
-        using ReturnType = R;
+        //1. 提取类型
+        using SignalTraits = FunctionTraits<SignalType>;
+        using SlotTraits = FunctionTraits<SlotType>;
+
+        using SignalClass = typename SignalTraits::MemberType;
+        using SignalArgs = typename SignalClass::ArgsTuple;
+        using ReceiverArgs = typename SlotTraits::ArgsTuple;
+
+        ///类型检查器
+        //TypeDumper<typename SlotTraits::ArgsTuple> dump1;
+
+        //2. 编译检查
+        static_assert(std::is_same_v<SignalArgs, ReceiverArgs>, "Signal and Slot arguments must match!");
+        static_assert(std::is_base_of_v<Trackable, Receiver>, "Receiver must be derived from Trackable");
+        // 3. 真正连接（调用你已有的 Signal::connect）
+        auto conn = (sender->*signal).connect([receiver,slot](auto&&... args)
+        {
+            (receiver->*slot)(std::forward<decltype(args)>(args)...);
+        });
+        static_cast<Trackable*>(receiver)->addConnection(conn);
+        return conn;
+    }
+
+    ///A并不一定需要继承Trackable
+    class A : public Trackable
+    {
+    public:
+        Signal<int> sig;
+    };
+
+    class B : public Trackable
+    {
+    public:
+        void onSig(int x)
+        {
+            std::cout << "B::onSig " << x << "\n";
+        }
+    };
+}
+
+
+namespace Version6
+{
+    using Connection = Version5::Connection;
+    using Trackable = Version5::Trackable;
+
+
+    template <typename... Args>
+    class Signal
+    {
+    public:
+        Signal(): m_State(std::make_shared<State>())
+        {
+        }
+
+        struct Slot
+        {
+            std::function<void(Args...)> fun;
+        };
+
+        struct State
+        {
+            std::vector<std::shared_ptr<Slot>> slots{};
+        };
+
+        using Signature = void(Args...);
         using ArgsTuple = std::tuple<Args...>;
+
+        ///匿名函数
+        std::shared_ptr<Connection> connect(const std::function<void(Args... args)>& f)
+        {
+            auto s = std::make_shared<Slot>();
+            s->fun = f;
+            m_State->slots.push_back(s);
+            std::weak_ptr<State> weakState = m_State;
+            auto conn = std::make_shared<Connection>([weakState,s]()
+            {
+                if (auto state = weakState.lock())
+                {
+                    state->slots.erase(std::remove(state->slots.begin(), state->slots.end(), s), state->slots.end());
+                }
+            });
+            return conn;
+        }
+
+        void emit(Args... args)
+        {
+            for (const auto& s : m_State->slots)
+            {
+                s->fun(args...);
+            }
+        }
+
+    private:
+        std::shared_ptr<State> m_State;
     };
 
-    ///类成员函数
-    template <typename C, typename R, typename... Args>
-    struct FunctionTraits<R(C::*)(Args...)>
-    {
-        using ClassType = C;
-        using ReturnType = R;
-        using ArgsTuple = std::tuple<Args...>;
-    };
-
-    ///类成员变量
-    template <typename C, typename T>
-    struct FunctionTraits<T C::*>
-    {
-        using MemberType = T;
-    };
-
-    ///类成员函数const
-    template <typename C, typename R, typename... Args>
-    struct FunctionTraits<R(C::*)(Args...) const>
-    {
-        using ClassType = C;
-        using ReturnType = R;
-        using ArgsTuple = std::tuple<Args...>;
-    };
 
     template <typename Sender, typename SignalType, typename Receiver, typename SlotType>
     std::shared_ptr<Connection> connect(Sender* sender, SignalType signal, Receiver* receiver, SlotType slot)
@@ -531,21 +572,24 @@ namespace Version5
 
         //2. 编译检查
         static_assert(std::is_same_v<SignalArgs, ReceiverArgs>, "Signal and Slot arguments must match!");
-
+        static_assert(std::is_base_of_v<Trackable, Receiver>, "Receiver must be derived from Trackable");
         // 3. 真正连接（调用你已有的 Signal::connect）
-        return (sender->*signal).connect([receiver,slot](auto&&... args)
+        auto conn = (sender->*signal).connect([receiver,slot](auto&&... args)
         {
             (receiver->*slot)(std::forward<decltype(args)>(args)...);
         });
+        static_cast<Trackable*>(receiver)->addConnection(conn);
+        return conn;
     }
 
-    class A
+    ///A并不一定需要继承Trackable
+    class A : public Trackable
     {
     public:
         Signal<int> sig;
     };
 
-    class B
+    class B : public Trackable
     {
     public:
         void onSig(int x)
@@ -571,7 +615,18 @@ class SignalConnectManager
 public:
     SignalConnectManager()
     {
-        test5();
+        test6();
+    }
+
+    void test2()
+    {
+        Version2::Signal<int> signalV2;
+        {
+            auto p = std::make_shared<Player>();
+            signalV2.connect(p, &Player::onDamage);
+            signalV2.emit(2); // 会调用
+        }
+        signalV2.emit(3); // p 已析构，不应调用，并清理 slot
     }
 
     void test3()
@@ -601,10 +656,29 @@ public:
 
     void test5()
     {
+        ///测试b对象死亡情况
         Version5::A a;
-        Version5::B b;
-        auto c0 = Version5::connect(&a, &Version5::A::sig, &b, &Version5::B::onSig);
+        std::shared_ptr<Version5::Connection> conn = nullptr;
+        {
+            Version5::B b;
+            conn = Version5::connect(&a, &Version5::A::sig, &b, &Version5::B::onSig);
+            a.sig.emit(10);
+        }
         a.sig.emit(10);
+        conn->disConnect();
+    }
+
+    void test6()
+    {
+        ///测试a对象死亡情况
+        Version6::B b;
+        std::shared_ptr<Version6::Connection> conn = nullptr;
+        {
+            Version6::A a;
+            conn = Version6::connect(&a, &Version6::A::sig, &b, &Version6::B::onSig);
+            a.sig.emit(10);
+        }
+        conn->disConnect();
     }
 };
 
