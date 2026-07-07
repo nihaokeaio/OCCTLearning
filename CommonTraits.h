@@ -17,7 +17,7 @@ struct FunctionTraits<R(*)(Args...)>
     using ArgsTuple = std::tuple<Args...>;
 };
 
-///类成员函数
+///类成员函数（包括了匿名函数）
 template <typename C, typename R, typename... Args>
 struct FunctionTraits<R(C::*)(Args...)>
 {
