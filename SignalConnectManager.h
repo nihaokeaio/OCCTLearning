@@ -9,6 +9,7 @@
 #include <functional>
 #include <iostream>
 #include <vector>
+#include <concepts>
 
 template <typename T>
 struct TypeDumper;
@@ -111,7 +112,7 @@ namespace Version3
     {
         bool isAlive() override
         {
-            return !object.expired();
+            return !SlotBase<Args...>::object.expired();
         }
     };
 
@@ -221,7 +222,7 @@ namespace Version4
     {
         bool isAlive() override
         {
-            return !object.expired();
+            return !SlotBase<Args...>::object.expired();
         }
     };
 
@@ -769,6 +770,185 @@ namespace Version7
 }
 
 
+namespace Version8
+{
+    class Connection
+    {
+    public:
+        explicit Connection(const std::function<void()>& f): disConnectFun(f)
+        {
+        }
+
+        void disConnect()
+        {
+            if (!disConnectFun)
+                return;
+            std::cout << "Connection is disConnect\n";
+            disConnectFun();
+            disConnectFun = nullptr;
+        }
+
+        // 检查是否已断开
+        bool isDisconnected() const
+        {
+            return !disConnectFun;
+        }
+
+    private:
+        std::function<void()> disConnectFun;
+    };
+
+    class ConnectionScope
+    {
+    public:
+        explicit ConnectionScope(const std::shared_ptr<Connection>& connection): m_Connection(connection)
+        {
+        }
+
+        ~ConnectionScope()
+        {
+            if (m_Connection)
+            {
+                m_Connection->disConnect();
+            }
+        }
+
+    private:
+        std::shared_ptr<Connection> m_Connection;
+    };
+
+    class Trackable
+    {
+    public:
+        ~Trackable()
+        {
+            // 析构时自动断开所有连接
+            for (auto& conn : connections)
+            {
+                if (conn) conn->disConnect();
+            }
+        }
+
+        void addConnection(const std::shared_ptr<Connection>& conn)
+        {
+            connections.push_back(conn);
+        }
+
+    private:
+        std::vector<std::shared_ptr<Connection>> connections;
+    };
+
+
+    template <typename... Args>
+    class Signal
+    {
+    public:
+        Signal(): m_State(std::make_shared<State>())
+        {
+        }
+
+        struct Slot
+        {
+            std::function<void(Args...)> fun;
+        };
+
+        struct State
+        {
+            std::vector<std::shared_ptr<Slot>> slots{};
+        };
+
+        using Signature = void(Args...);
+        using ArgsTuple = std::tuple<Args...>;
+
+        ///匿名函数
+        std::shared_ptr<Connection> connect(const std::function<void(Args... args)>& f)
+        {
+            auto s = std::make_shared<Slot>();
+            s->fun = f;
+            m_State->slots.push_back(s);
+            std::weak_ptr<State> weakState = m_State;
+            auto conn = std::make_shared<Connection>([weakState,s]()
+            {
+                if (auto state = weakState.lock())
+                {
+                    state->slots.erase(std::remove(state->slots.begin(), state->slots.end(), s), state->slots.end());
+                }
+            });
+            return conn;
+        }
+
+        void emit(Args... args)
+        {
+            for (const auto& s : m_State->slots)
+            {
+                s->fun(args...);
+            }
+        }
+
+    private:
+        std::shared_ptr<State> m_State;
+    };
+
+    template <typename Callable, typename Object, typename Tuple>
+    struct IsInvocableWithTuple;
+
+    template <typename Callable, typename Object, typename... Args>
+    struct IsInvocableWithTuple<Callable, Object, std::tuple<Args...>>
+    {
+        static constexpr bool value = std::is_invocable_v<Callable, Object, Args...>;
+    };
+
+    template <typename Sender, typename SignalType, typename Receiver, typename SlotType>
+    std::enable_if_t<IsInvocableWithTuple<SlotType, Receiver*, typename FunctionTraits<
+                                              SignalType>::MemberType::ArgsTuple>::value, std::shared_ptr<Connection>>
+    connect(Sender* sender, SignalType signal, Receiver* receiver, SlotType slot)
+    {
+        //1. 提取类型
+        using SignalTraits = FunctionTraits<SignalType>;
+
+        using SignalClass = typename SignalTraits::MemberType;
+        using SignalArgs = typename SignalClass::ArgsTuple;
+        //2. 编译检查
+        static_assert(IsInvocableWithTuple<SlotType, Receiver*, SignalArgs>::value,
+                      "slot cannot be invoked with signal arguments");
+        static_assert(std::is_base_of_v<Trackable, Receiver>, "Receiver must be derived from Trackable");
+        // 3. 真正连接（调用你已有的 Signal::connect）
+        auto conn = (sender->*signal).connect([receiver,slot]<typename... T0>(T0&&... args)
+        {
+            std::invoke(slot, receiver, std::forward<T0>(args)...);
+        });
+        static_cast<Trackable*>(receiver)->addConnection(conn);
+        return conn;
+    }
+
+    template <typename Callable, typename Object, typename... Args>
+    concept Invocable = IsInvocableWithTuple<Callable, Object, Args...>::value;
+
+    template <typename Sender, typename SignalType, typename Receiver, typename SlotType>
+        requires Invocable<SlotType, Receiver*, typename FunctionTraits<SignalType>::MemberType::ArgsTuple>
+    std::shared_ptr<ConnectionScope> connectScope(Sender* sender, SignalType signal, Receiver* receiver, SlotType slot)
+    {
+        return std::make_shared<ConnectionScope>(connect(sender, signal, receiver, slot));
+    }
+
+    ///A并不一定需要继承Trackable
+    class A : public Trackable
+    {
+    public:
+        Signal<double> sig;
+    };
+
+    class B : public Trackable
+    {
+    public:
+        void onSig(int x)
+        {
+            std::cout << "B::onSig " << x << "\n";
+        }
+    };
+}
+
+
 class Player
 {
 public:
@@ -784,7 +964,7 @@ class SignalConnectManager
 public:
     SignalConnectManager()
     {
-        test7();
+        test8();
     }
 
     void test2()
@@ -857,6 +1037,17 @@ public:
         {
             Version7::A a;
             auto connScope = Version7::connectScope(&a, &Version7::A::sig, &b, &Version7::B::onSig);
+            a.sig.emit(10);
+        }
+    }
+
+    void test8()
+    {
+        ///测试a对象死亡情况
+        Version8::B b;
+        {
+            Version8::A a;
+            auto connScope = Version8::connectScope(&a, &Version8::A::sig, &b, &Version8::B::onSig);
             a.sig.emit(10);
         }
     }
