@@ -40,6 +40,7 @@
 
 #include <GLFW/glfw3.h>
 #include "ObjectTreeManager.h"
+#include "SignalConnectManager.h"
 
 namespace
 {
