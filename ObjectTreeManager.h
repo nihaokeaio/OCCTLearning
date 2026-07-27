@@ -394,10 +394,12 @@ namespace Version6
             return m_Children.contains(child);
         }
 
-        virtual ~Object()
+        ~Object() override
         {
             std::cout << "[ " << m_Name << " ]" << " Destroyed Start!" << std::endl;
             m_LifetimeToken.reset();
+            DisAllConnect();
+            m_DestroySignal.emit(this);
             // 析构时父对象必须已经为null
             assert(m_Parent == nullptr);
             for (const auto& c : m_Children | std::views::keys)
@@ -446,9 +448,12 @@ namespace Version6
             return rowPtr;
         }
 
+    public:
+        std::string m_Name;
+        MiniSignal::Signal<Object*> m_DestroySignal;
+
     private:
         std::unordered_map<Object*, std::unique_ptr<Object>> m_Children;
-        std::string m_Name;
         Object* m_Parent = nullptr;
         std::shared_ptr<LifetimeToken> m_LifetimeToken;
 
@@ -507,6 +512,25 @@ namespace Version6
         T* m_Pointer = nullptr;
         std::weak_ptr<LifetimeToken> m_LifetimeToken;
     };
+
+    class Sender
+    {
+    public:
+        MiniSignal::Signal<int, std::string> m_Signal;
+    };
+
+    class Receiver : public Object
+    {
+    public:
+        explicit Receiver(const std::string& name): Object(name)
+        {
+        }
+
+        void OnMessage(const int num, const std::string& message)
+        {
+            std::cout << "num = " << num << " message = " << message << std::endl;
+        }
+    };
 }
 
 
@@ -517,58 +541,37 @@ public:
     {
         test6();
     }
+
     void test6()
     {
-        using namespace Version5;
+        using namespace Version6;
+        using namespace MiniSignal;
         auto root = std::make_unique<Object>("root");
-        auto o1 = std::make_unique<Object>("o1");
-        auto o2 = std::make_unique<Object>("o2");
-        auto o3 = std::make_unique<Object>("o3");
-        auto o4 = std::make_unique<Object>("o4");
-        auto o5 = std::make_unique<Object>("o5");
-        ObjectPtr rawo1(o1.get());
-        ObjectPtr rawo2(o2.get());
-        ObjectPtr rawo3(o3.get());
-        ObjectPtr rawo4(o4.get());
-        ObjectPtr rawo5(o5.get());
+        Sender sender;
+        auto receiverOwner = std::make_unique<Receiver>("receiver");
+        ObjectPtr receiver(receiverOwner.get());
+        root->AttachChild(std::move(receiverOwner));
+        connect(&sender, &Sender::m_Signal, receiver.Get(), &Receiver::OnMessage);
+        bool destroyNotified = false;
+        connect(receiver.Get(), &Receiver::m_DestroySignal, [&](const Object* object)
+        {
+            destroyNotified = true;
+            // Destroyed 发出之前 ObjectPtr 应当已经失效
+            assert(!receiver);
+            std::cout << object->m_Name << " OnDestroy!\n";
+        });
+        connect(root.get(), &Object::m_DestroySignal, [&](const Object* object)
+        {
+            destroyNotified = true;
+            // Destroyed 发出之前 ObjectPtr 应当已经失效
+            assert(!root);
+            std::cout << object->m_Name << " OnDestroy!\n";
+        });
 
-        root->AttachChild(std::move(o1));
-        rawo1->AttachChild(std::move(o2));
-        root->AttachChild(std::move(o3));
-        rawo1->AttachChild(std::move(o4));
-        rawo4->AttachChild(std::move(o5));
-
-        assert(rawo1->HasChild(rawo2.Get()));
-        assert(rawo1->HasChild(rawo4.Get()));
-        assert(root->HasChild(rawo3.Get()));
-
-        rawo4->Reparent(rawo3.Get());
-        assert(rawo3->HasChild(rawo4.Get()));
-
-        // 复制观察者测试
-        ObjectPtr copy1 = rawo3;
-        ObjectPtr copy2 = copy1;
-        assert(copy1);
-        assert(copy2);
-
-        // 移动观察者测试
-        ObjectPtr move1 = std::move(rawo1);
-        assert(move1);
-        assert(rawo1);
-
-        // 手动Reset
-        ObjectPtr observer = rawo2;
-        observer.Reset();
-        assert(!observer);
-        assert(rawo2); // 重置一个观察者不影响其他观察者
-
-        auto o3Owner = root->DetachChild(rawo3.Get());
-        o3Owner.reset();
-        assert(!rawo3);
-        assert(!rawo4);
-        assert(!rawo5);
-        assert(copy1);
-        assert(copy2);
+        sender.m_Signal.emit(5, "start emit");
+        root.reset();
+        assert(!receiver);
+        sender.m_Signal.emit(2, "end emit");
     }
 };
 

@@ -73,18 +73,26 @@ namespace MiniSignal
         Trackable(const Trackable& trackable) = delete;
         Trackable& operator=(const Trackable& trackable) = delete;
 
-        ~Trackable()
+        void AddConnection(const std::shared_ptr<Connection>& conn)
+        {
+            m_Connections.push_back(conn);
+        }
+
+    protected:
+        virtual ~Trackable()
         {
             // 析构时自动断开所有连接
+            DisAllConnect();
+        }
+
+        /// 断开所有连接
+        void DisAllConnect() noexcept
+        {
             for (auto& conn : m_Connections)
             {
                 if (conn) conn->DisConnect();
             }
-        }
-
-        void addConnection(const std::shared_ptr<Connection>& conn)
-        {
-            m_Connections.push_back(conn);
+            m_Connections.clear();
         }
 
     private:
@@ -195,7 +203,7 @@ namespace MiniSignal
         {
             std::invoke(slot, receiver, std::forward<T0>(args)...);
         });
-        static_cast<Trackable*>(receiver)->addConnection(conn);
+        static_cast<Trackable*>(receiver)->AddConnection(conn);
         return conn;
     }
 
