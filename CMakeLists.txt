@@ -19,6 +19,8 @@ file(GLOB_RECURSE SOURCES
     "${CMAKE_SOURCE_DIR}/*.h"
 )
 
+list(FILTER SOURCES EXCLUDE REGEX ".*/tests/.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/cmake-build[^/]*/.*")
 # Exclude CMake-generated files from the SOURCES list
 list(FILTER SOURCES EXCLUDE REGEX ".*CMakeFiles.*")
 
@@ -52,4 +54,34 @@ if(WIN32)
         set_target_properties(OcctImgui PROPERTIES VS_DEBUGGER_ENVIRONMENT "${RELEASE_ENVS}")
     endif()
 endif()
+
+
+include(CTest)
+if (BUILD_TESTING)
+    include(FetchContent)
+    FetchContent_Declare(
+            googletest
+            URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+    )
+
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
+    FetchContent_MakeAvailable(googletest)
+
+    add_executable(MetaObjectTests
+            tests/MetaObjectTests.cpp
+    )
+    target_include_directories(MetaObjectTests PRIVATE
+            ${CMAKE_SOURCE_DIR}
+    )
+    target_compile_features(MetaObjectTests PRIVATE cxx_std_20)
+
+    target_link_libraries(MetaObjectTests PRIVATE
+            GTest::gtest_main
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(MetaObjectTests)
+endif ()
+
 
