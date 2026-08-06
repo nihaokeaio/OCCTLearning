@@ -21,6 +21,7 @@ file(GLOB_RECURSE SOURCES
 
 # Exclude CMake-generated files from the SOURCES list
 list(FILTER SOURCES EXCLUDE REGEX ".*CMakeFiles.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/test/.*")
 
 # Add executable target
 add_executable(OcctImgui ${SOURCES})
@@ -52,4 +53,37 @@ if(WIN32)
         set_target_properties(OcctImgui PROPERTIES VS_DEBUGGER_ENVIRONMENT "${RELEASE_ENVS}")
     endif()
 endif()
+
+include(CTest)
+
+if (BUILD_TESTING)
+    include(FetchContent)
+
+    FetchContent_Declare(
+            googletest
+            URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+    )
+
+    # 避免 Windows 下 GoogleTest 修改父项目的运行库配置
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
+    FetchContent_MakeAvailable(googletest)
+
+    add_executable(SignalSlotFeatTest
+            test/SignalSlotFeatTest.cpp
+    )
+
+    target_include_directories(SignalSlotFeatTest PRIVATE
+            ${CMAKE_SOURCE_DIR}
+    )
+
+    target_compile_features(SignalSlotFeatTest PRIVATE cxx_std_20)
+
+    target_link_libraries(SignalSlotFeatTest PRIVATE
+            GTest::gtest_main
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(SignalSlotFeatTest)
+endif ()
 

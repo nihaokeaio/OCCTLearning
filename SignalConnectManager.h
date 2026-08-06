@@ -1546,7 +1546,7 @@ public:
     }
 };
 
-static SignalConnectManager signal_connect_manager;
+//static SignalConnectManager signal_connect_manager;
 
 
 
