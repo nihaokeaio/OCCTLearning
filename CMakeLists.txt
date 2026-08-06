@@ -69,7 +69,7 @@ if (BUILD_TESTING)
     FetchContent_MakeAvailable(googletest)
 
     add_executable(MetaObjectTests
-            tests/MetaObjectTests.cpp
+            test/MetaObjectTests.cpp
     )
     target_include_directories(MetaObjectTests PRIVATE
             ${CMAKE_SOURCE_DIR}

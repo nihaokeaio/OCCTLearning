@@ -63,3 +63,50 @@ TEST(ObjectSerializationTest, RoundTripsButton)
     ASSERT_NE(restoredVisible, nullptr);
     EXPECT_TRUE(*restoredVisible);
 }
+
+TEST(ObjectDeserializationTest, RejectsUnknownClass)
+{
+    using namespace Version17;
+    RegisterObject registry;
+    registry.Register<Object>();
+    registry.Register<Widget>();
+    registry.Register<Button>();
+
+    SerializedObject snapshot;
+    snapshot.m_ClassName = "UnknownClass";
+    auto restored = DeserializeObject(snapshot, registry);
+    EXPECT_EQ(restored, nullptr);
+}
+
+TEST(ObjectDeserializationTest, RejectsMismatchedPropertyType)
+{
+    using namespace Version17;
+    RegisterObject registry;
+    registry.Register<Object>();
+    registry.Register<Widget>();
+    registry.Register<Button>();
+
+    RegisterBuiltinMetaTypes<int>();
+    RegisterBuiltinMetaTypes<bool>();
+    RegisterBuiltinMetaTypes<double>();
+    RegisterBuiltinMetaTypes<std::string>();
+
+    SerializedObject snapshot;
+    snapshot.m_ClassName = "Button";
+    snapshot.m_Properties.emplace("M_Length", SerializedProperty{"bool", SerializedValue{true}});
+    auto restored = DeserializeObject(snapshot, registry);
+    EXPECT_EQ(restored, nullptr);
+}
+
+TEST(ObjectDeserializationTest, RejectsMalformedPoint)
+{
+    // Point 缺少 x/y 或字段类型错误
+    using namespace Version17;
+    // 缺醒字段
+    SerializedValue::Object missingY{{"x", SerializedValue{3}}};
+    assert(!MetaValue::Deserialize(GetMetaType<Point>(),SerializedValue{std::move(missingY)}));
+
+    // 错误字段
+    SerializedValue::Object wrongX{{"x", SerializedValue{std::string{"3"}}}, {"y", SerializedValue{4}}};
+    assert(!MetaValue::Deserialize(GetMetaType<Point>(),SerializedValue{std::move(wrongX)}));
+}
