@@ -11,9 +11,6 @@
 #include <vector>
 #include <concepts>
 
-template <typename T>
-struct TypeDumper;
-
 ///设计一个信号类
 namespace MiniSignal
 {
@@ -239,57 +236,4 @@ namespace MiniSignal
         });
         return conn;
     }
-
-
-    ///A并不一定需要继承Trackable
-    class A : public Trackable
-    {
-    public:
-        Signal<double> sig;
-    };
-
-    class B : public Trackable
-    {
-    public:
-        void onSig(int x)
-        {
-            std::cout << "B::onSig " << x << "\n";
-        }
-    };
 }
-
-class Player
-{
-public:
-    void onDamage(int dmg)
-    {
-        std::cout << "Player got " << dmg << "\n";
-    }
-};
-
-
-class SignalConnectManager
-{
-public:
-    SignalConnectManager()
-    {
-        test10();
-    }
-
-    void test10()
-    {
-        ///测试槽函数中断开链接的情况
-        MiniSignal::A a;
-        MiniSignal::B b;
-        auto conn = MiniSignal::connect(&a, &MiniSignal::A::sig, &b, &MiniSignal::B::onSig);
-        auto lambdaConn = MiniSignal::connectScope(&a, &MiniSignal::A::sig, [conn](int dmg)
-        {
-            conn->DisConnect();
-        });
-        a.sig.emit(10);
-        ///此时a的连接应该已经断开了
-        a.sig.emit(10);
-    }
-};
-
-
