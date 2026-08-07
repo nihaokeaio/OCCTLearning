@@ -1,6 +1,6 @@
-#include "SketchModel.h"
+#include "../Data/SketchModel.h"
 
-#include "DependencyGraph/Core/ComputerView.h"
+#include "../DependencyGraph/ComputerView.h"
 
 SketchModel::SketchModel(DGContext& context)
     : m_Context(context)

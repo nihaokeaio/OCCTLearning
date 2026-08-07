@@ -1,8 +1,8 @@
 #pragma once
 
 #include "DependencyGraph/Binding/ValueBindingRegistry.h"
-#include "DependencyGraph/Core/DGContext.h"
-#include "Sketch/SketchModel.h"
+#include "DGContext.h"
+#include "../Demo/SketchModel.h"
 
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>

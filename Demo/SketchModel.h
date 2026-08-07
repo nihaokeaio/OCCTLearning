@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DependencyGraph/Core/DGContext.h"
+#include "../DependencyGraph/DGContext.h"
 
 #include <gp_Pnt.hxx>
 

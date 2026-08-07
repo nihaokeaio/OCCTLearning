@@ -35,7 +35,7 @@ namespace MiniObjectTree
     class Object : public MiniSignal::Trackable
     {
     public:
-        explicit Object(std::string name): m_Name(std::move(name)), m_LifetimeToken(std::make_shared<LifetimeToken>())
+        explicit Object(): m_LifetimeToken(std::make_shared<LifetimeToken>())
         {
         }
 

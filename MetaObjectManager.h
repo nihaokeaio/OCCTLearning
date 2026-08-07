@@ -685,9 +685,6 @@ namespace MiniMetaObject
   class Object
   {
   public:
-    virtual void foo() = 0;
-
-  public:
     virtual ~Object() = default;
 
     static const MetaObject* GetStaticMetaObject() noexcept
