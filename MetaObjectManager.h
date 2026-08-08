@@ -274,6 +274,8 @@ namespace MiniMetaObject
     }
 
 
+    MetaValue() = default;
+
     MetaValue(const MetaValue& other) = default;
     MetaValue(MetaValue&& other) noexcept = default;
     MetaValue& operator=(const MetaValue& other) = default;

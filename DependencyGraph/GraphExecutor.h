@@ -1,10 +1,7 @@
 #pragma once
 
-#include "DependencyGraphIds.h"
 
-#include <functional>
 #include <queue>
-#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -37,12 +34,6 @@ struct GraphExecutor
     [[nodiscard]] const ComputerNodeId* FindProducerNode(const PropertyAddress& address) const;
 
 private:
-    struct FlowEvent
-    {
-        PropertyAddress trigger;
-        ComputerNodeId node;
-        std::vector<PropertyAddress> outputs;
-    };
 
     // 消费当前 dirty value 队列，收集本批需要执行的计算节点。
     // 注意：这里不会执行节点，只是把“哪些节点被脏值触发”转成一个 batch。

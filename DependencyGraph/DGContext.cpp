@@ -1,3 +1,4 @@
+#include "ComputerView.h"
 #include "DependencyGraph//DGContext.h"
 
 #include <queue>
@@ -5,10 +6,8 @@
 #include <unordered_set>
 #include <utility>
 
-#include "ComputerView.h"
 
-DGContext::DGContext()
-{
+DGContext::DGContext(Document *document) : m_Document(document) {
     m_GraphExecutor = std::make_unique<GraphExecutor>();
 }
 
@@ -20,14 +19,12 @@ bool DGContext::AddValueAddress(const PropertyAddress& propertyAddress)
 
 bool DGContext::RemoveValueAddress(const PropertyAddress& propertyAddress)
 {
-    if (!m_Values.contains(propertyAddress))
-    {
+    if (!HasValue(propertyAddress)) {
         return false;
     }
 
     const auto dependentNodes = m_GraphExecutor->FindDependentNodes(propertyAddress);
-    if (dependentNodes != nullptr && !dependentNodes->empty())
-    {
+    if (!dependentNodes.empty()) {
         throw std::runtime_error("Cannot remove value with dependent compute nodes");
     }
     if (m_GraphExecutor->FindProducerNode(propertyAddress) != nullptr)
@@ -45,9 +42,11 @@ bool DGContext::HasValue(const PropertyAddress& id) const
     return m_Values.contains(id);
 }
 
-ComputerNodeId DGContext::AddComputeNode(std::span<PropertyAddress> inputs, std::span<PropertyAddress> outputs,
+ComputerNodeId DGContext::AddComputeNode(std::vector<PropertyAddress> inputs, std::vector<PropertyAddress> outputs,
                                          ComputerNode::ComputeFunc computeFunc)
 {
+    auto node = std::make_unique<ComputerNode>(inputs, outputs, computeFunc);
+    return AddComputerNode(std::move(node), inputs, outputs);
 }
 
 ComputerNode* DGContext::GetComputerNode(const ComputerNodeId& id)
@@ -60,15 +59,32 @@ ComputerNode* DGContext::GetComputerNode(const ComputerNodeId& id)
     return iter->second.get();
 }
 
-bool DGContext::HasValue(const ValueId& id) const
-{
-    return m_Values.contains(id);
-}
-
-bool DGContext::HasNode(const ComputerNodeId& id) const
-{
+bool DGContext::HasComputeNodeNode(const ComputerNodeId &id) const {
     return m_Nodes.contains(id);
 }
+
+void DGContext::MarkDirty(PropertyAddress node) const {
+    m_GraphExecutor->MarkDirty(std::move(node));
+}
+
+bool DGContext::RemoveComputeNode(const ComputerNodeId &nodeId) {
+    const auto iter = m_Nodes.find(nodeId);
+    if (iter == m_Nodes.end()) {
+        return false;
+    }
+
+    auto outputs = iter->second->m_Outputs;
+    m_GraphExecutor->RemoveComputerNode(nodeId);
+    m_Nodes.erase(iter);
+
+    for (auto &outputId: outputs) {
+        if (m_Values.contains(outputId) && m_GraphExecutor->FindProducerNode(outputId) == nullptr) {
+            SetValueRole(outputId, ValueRole::User);
+        }
+    }
+    return true;
+}
+
 
 ComputerNodeId DGContext::AddComputerNode(std::unique_ptr<ComputerNode>&& node, std::span<PropertyAddress> inputs,
                                           std::span<PropertyAddress> outputs)
@@ -99,37 +115,24 @@ ComputerNodeId DGContext::AddComputerNode(std::unique_ptr<ComputerNode>&& node, 
 
     if (WouldCreateCycle(inputs, outputs))
     {
-        throw std::runtime_error("Dependency cycle detected while adding node " + NodeLabel(node->m_Id));
+        throw std::runtime_error("Dependency cycle detected while adding node ");
     }
 
-    node->m_Inputs = inputs;
     for (const auto& inputId : inputs)
     {
         m_GraphExecutor->AddDependentNode(inputId, node->m_Id);
     }
 
-    node->m_Outputs = outputs;
-    for (const auto& outputId : outputs)
-    {
-        SetValueRole(outputId, ValueRole::Derived);
+    for (auto &outputId: outputs) {
+        SetValueRole(outputId, ValueRole::DependencyGraph);
         m_GraphExecutor->AddNodeOutput(node->m_Id, outputId);
     }
     const auto id = node->m_Id;
-    m_Nodes.insert({id, std::move(node)});
+    m_Nodes.emplace(id, std::move(node));
     return id;
 }
 
-ComputerNodeId DGContext::AddComputeNode(const std::vector<ValueId>& inputs,
-                                         const std::vector<ValueId>& outputs,
-                                         ComputerNode::ComputeFunc computeFunc)
-{
-    auto node = std::make_unique<ComputerNode>();
-    node->computeFunc = std::move(computeFunc);
-    return AddComputerNode(std::move(node), inputs, outputs);
-}
-
-bool DGContext::CanReachValue(PropertyAddress from, PropertyAddress target) const
-{
+bool DGContext::CanReachValue(const PropertyAddress &from, const PropertyAddress &target) const {
     if (from == target)
     {
         return true;
@@ -148,18 +151,8 @@ bool DGContext::CanReachValue(PropertyAddress from, PropertyAddress target) cons
         {
             continue;
         }
-        const auto dependentNodes = m_GraphExecutor->FindDependentNodes(current);
-        if (dependentNodes == nullptr)
-            continue;
-
-        for (const auto& nodeId : dependentNodes)
-        {
-            const auto outputs = m_GraphExecutor->FindNodeOutputs(nodeId);
-            if (outputs == nullptr)
-                continue;
-
-            for (const auto& outputId : outputs)
-            {
+        for (const auto &nodeId: m_GraphExecutor->FindDependentNodes(current)) {
+            for (const auto &outputId: m_GraphExecutor->FindNodeOutputs(nodeId)) {
                 if (outputId == target)
                 {
                     return true;
@@ -198,32 +191,7 @@ ValueRole DGContext::GetValueRole(const PropertyAddress& valueAddress)
 }
 
 
-bool DGContext::RemoveComputeNode(const ComputerNodeId& nodeId)
-{
-    const auto iter = m_Nodes.find(nodeId);
-    if (iter == m_Nodes.end())
-    {
-        return false;
-    }
 
-    auto outputs = iter->second->m_Outputs;
-    m_GraphExecutor->RemoveComputerNode(nodeId);
-    m_Nodes.erase(iter);
-
-    for (auto& outputId : outputs)
-    {
-        if (m_Values.contains(outputId) && m_GraphExecutor->FindProducerNode(outputId) == nullptr)
-        {
-            SetValueRole(outputId, ValueRole::User);
-        }
-    }
-    return true;
-}
-
-bool DGContext::HasComputeNodeNode(const ComputerNodeId& id) const
-{
-    return m_Nodes.contains(id);
-}
 
 void DGContext::Clear()
 {
@@ -235,4 +203,8 @@ void DGContext::Clear()
 DGContext::EvaluationResult DGContext::Evaluate()
 {
     return m_GraphExecutor->Evaluate(this);
+}
+
+Document *DGContext::GetDocument() const {
+    return m_Document;;
 }

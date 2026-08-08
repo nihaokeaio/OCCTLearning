@@ -43,13 +43,23 @@ private:
 template <typename T>
 T ComputerView::Input(size_t index) const
 {
-    return In(index);
+    if (const auto ret = In(index); ret.has_value()) {
+        if (auto result = ret.value().GetIf<T>()) {
+            return *result;
+        }
+    }
+    return T();
 }
 
 template <typename T>
 T ComputerView::Output(size_t index) const
 {
-    return Out(index);
+    if (const auto ret = Out(index); ret.has_value()) {
+        if (auto result = ret.value().GetIf<T>()) {
+            return *result;
+        }
+    }
+    return T();
 }
 
 template <typename T>

@@ -43,7 +43,7 @@ public:
 
     void SetProperty(const std::string& key, const PropertyValue& value);
 
-    bool GetProperty(const std::string& key, PropertyValue& value) const;
+    std::optional<PropertyValue> GetProperty(const std::string &key) const;
 
     [[nodiscard]] bool HasProperty(std::string_view key) const;
 

@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "DGContext.h"
 #include "Data/Document.h"
 
 ComputerNode::ComputerNode(std::vector<PropertyAddress> inputs, std::vector<PropertyAddress> outputs,
@@ -23,6 +24,6 @@ void ComputerNode::Evaluator(DGContext& context)
         throw std::runtime_error("ComputerNode has no compute function");
     }
 
-    const ComputerView view(context, m_Inputs, m_Outputs);
+    const ComputerView view(context.GetDocument(), m_Inputs, m_Outputs);
     computeFunc(view);
 }

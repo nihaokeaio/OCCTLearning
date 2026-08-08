@@ -6,65 +6,27 @@
 
 #include <string>
 
-struct SketchPoint
-{
-    ValueId position;
-};
+#include "Data/Document.h"
 
-struct SketchSegment
-{
-    SketchPoint start;
-    SketchPoint end;
-    ValueId length;
-    ComputerNodeId lengthNode;
-};
-
-struct SketchArea
-{
-    ValueId area;
-    ComputerNodeId computeNode;
-};
-
-// 业务层对象
-struct SketchDistanceDimension
-{
-    SketchPoint start;
-    SketchPoint end;
-    ValueId measuredLength;
-    ComputerNodeId computeNode;
-};
 
 class SketchModel
 {
 public:
-    explicit SketchModel(DGContext& context);
+    explicit SketchModel(DGContext *context, Document *document);
 
-    SketchPoint CreatePoint(const gp_Pnt& position, const std::string& debugName = {});
-    SketchSegment CreateSegment(const SketchPoint& start, const SketchPoint& end,
-                                const std::string& debugName = {});
-    SketchArea CreateRectangleArea(const SketchSegment& width, const SketchSegment& height,
-                                   const std::string& debugName = {});
-    SketchArea CreateCircleAreaFromRadius(const SketchSegment& radius,
-                                          const std::string& debugName = {});
+    Element *CreateElement(std::string_view elementName) const;
 
-    // 业务层对象
-    SketchDistanceDimension CreateDistanceDimension(const SketchPoint& start, const SketchPoint& end,
-                                                    const std::string& debugName = {});
-    [[nodiscard]] double GetDistance(const SketchDistanceDimension& dimension) const;
+    void AddPropertyAddress(PropertyAddress address) const;
 
-    void MovePoint(const SketchPoint& point, const gp_Pnt& position);
-    DGContext::EvaluationResult Evaluate();
+    void AddSegmentComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out) const;
 
-    [[nodiscard]] gp_Pnt GetPosition(const SketchPoint& point) const;
-    [[nodiscard]] double GetLength(const SketchSegment& segment) const;
-    [[nodiscard]] double GetArea(const SketchArea& area) const;
+    void AddCircleAreaComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out) const;
+
+    DGContext::EvaluationResult Evaluate() const;
+
+    void MarkDirty(PropertyAddress node) const;
 
 private:
-    ComputerNodeId AddDistanceComputeNode(ValueId startPosition, ValueId endPosition, ValueId outputLength);
-
-    static constexpr const char* PositionProperty = "position";
-    static constexpr const char* LengthProperty = "length";
-    static constexpr const char* AreaProperty = "area";
-
-    DGContext& m_Context;
+    DGContext *m_Context;
+    Document *m_Document;
 };

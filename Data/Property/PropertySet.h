@@ -37,8 +37,7 @@ public:
     [[nodiscard]] bool Exists(const std::string& key) const;
 
     template <typename Owner, typename T>
-    MiniMetaObject::MetaProperty static MakeMetaProperty(const std::string& name, std::string& key)
-    {
+    MiniMetaObject::MetaProperty static MakeMetaProperty(const std::string &name, const std::string &key) {
         using namespace MiniMetaObject;
         static_assert(std::derived_from<Owner, Object>);
 
@@ -49,12 +48,14 @@ public:
             {
                 throw std::runtime_error("Invalid property owner");
             }
-            T value{};
-            if (!owner->GetProperty(key, value))
-            {
+            std::optional<PropertyValue> value;
+            if (value = owner->GetProperty(key); !value.has_value()) {
                 throw std::runtime_error("Property does not exist: " + key);
             }
-            return PropertyValue(value);
+            if (!value.value().GetIf<T>()) {
+                throw std::runtime_error("Property Type Invalid: ");
+            }
+            return value.value();
         };
         auto accessorSetter = [key](Object* object, const MetaValue& value)-> bool
         {

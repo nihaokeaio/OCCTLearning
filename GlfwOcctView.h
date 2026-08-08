@@ -39,7 +39,7 @@ public:
     GlfwOcctView();
 
     //! Destructor.
-    ~GlfwOcctView();
+    ~GlfwOcctView() override;
 
     //! Main application entry point.
     void run();

@@ -201,6 +201,7 @@ void GlfwOcctView::initViewer()
     myContext->Display(aCube, false);
     myDependencyGraphManager = std::make_unique<DependencyGraphManager>();
     myDependencyGraphManager->InitializeDemoScene(myContext);
+    myDependencyGraphManager->EvaluateAndRefreshScene();
 }
 
 void GlfwOcctView::initGui()
@@ -229,7 +230,6 @@ void GlfwOcctView::renderGui()
 
     if (myDependencyGraphManager != nullptr)
     {
-        myDependencyGraphManager->RenderGuiControls();
     }
 
     ImGui::Render();
@@ -373,23 +373,10 @@ void GlfwOcctView::onMouseButton(int theButton, int theAction, int theMods)
     const Graphic3d_Vec2i aPos = myOcctWindow->CursorPosition();
     if (theAction == GLFW_PRESS)
     {
-        if (theButton == GLFW_MOUSE_BUTTON_LEFT &&
-            myDependencyGraphManager != nullptr &&
-            myDependencyGraphManager->BeginPointDrag(myView, aPos.x(), aPos.y()))
-        {
-            return;
-        }
         PressMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
     }
     else
     {
-        if (theButton == GLFW_MOUSE_BUTTON_LEFT &&
-            myDependencyGraphManager != nullptr &&
-            myDependencyGraphManager->IsDraggingPoint())
-        {
-            myDependencyGraphManager->EndPointDrag();
-            return;
-        }
         ReleaseMouseButton(aPos, mouseButtonFromGlfw(theButton), keyFlagsFromGlfw(theMods), false);
     }
 }
@@ -412,12 +399,6 @@ void GlfwOcctView::onMouseMove(int thePosX, int thePosY)
     }
     else
     {
-        if (myDependencyGraphManager != nullptr &&
-            myDependencyGraphManager->DragPointTo(myView, thePosX, thePosY))
-        {
-            return;
-        }
-
         const Graphic3d_Vec2i aNewPos(thePosX, thePosY);
         UpdateMousePosition(aNewPos, PressedMouseButtons(), LastMouseFlags(), Standard_False);
     }

@@ -3,12 +3,18 @@
 //
 
 #include "Document.h"
-
-#include "Document.h"
-
 #include "Element.h"
+#include "ElementDerived.h"
 #include "GlobalUniqueId.h"
 #include "MessageInfo.h"
+
+Document::Document() {
+    m_MetaRegister = std::make_unique<MiniMetaObject::RegisterObject>();
+    m_MetaRegister->Register<Element>();
+    m_MetaRegister->Register<PointElement>();
+    m_MetaRegister->Register<SegmentElement>();
+    m_MetaRegister->Register<CircleElement>();
+}
 
 void Document::RegisterElement(std::unique_ptr<Element>&& element)
 {
@@ -47,4 +53,8 @@ Element* Document::FindElement(const ElementId& elementId)
         return iter->second.get();
     }
     return nullptr;
+}
+
+MiniMetaObject::RegisterObject *Document::GetMetaRegister() const {
+    return m_MetaRegister.get();
 }

@@ -10,12 +10,7 @@
 
 struct DGContext;
 
-struct ComputerNodeId
-{
-    ElementId m_Id;
-    bool operator==(const ComputerNodeId& other) const = default;
-};
-
+using ComputerNodeId = ElementId;
 
 struct ComputerNode
 {

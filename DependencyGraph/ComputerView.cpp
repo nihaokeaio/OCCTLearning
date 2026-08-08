@@ -33,10 +33,7 @@ std::optional<PropertyValue> ComputerView::GetValue(const PropertyAddress& addre
     const auto& key = address.propertyName;
     if (const auto element = m_Document->FindElement(elementId))
     {
-        PropertyValue value(0);
-        if (element->GetProperty(key, value))
-            return value;
-        return std::nullopt;
+        return element->GetProperty(key);
     }
     return std::nullopt;
 }

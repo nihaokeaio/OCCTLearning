@@ -9,11 +9,17 @@
 #include "ElementId.h"
 
 
+namespace MiniMetaObject {
+    class RegisterObject;
+}
+
 class Element;
 
 class Document
 {
 public:
+    Document();
+
     void RegisterElement(std::unique_ptr<Element>&& element);
 
     std::unique_ptr<Element> UnregisterElement(const ElementId& elementId);
@@ -25,8 +31,11 @@ public:
     template <typename T>
     T* FindElement(const ElementId& elementId);
 
+    MiniMetaObject::RegisterObject *GetMetaRegister() const;
+
 private:
     std::unordered_map<ElementId, std::unique_ptr<Element>> m_Elements;
+    std::unique_ptr<MiniMetaObject::RegisterObject> m_MetaRegister;
 };
 
 template <typename T>

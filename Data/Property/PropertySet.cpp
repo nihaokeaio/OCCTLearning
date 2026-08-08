@@ -10,7 +10,7 @@ PropertySet::~PropertySet() = default;
 
 void PropertySet::Set(const std::string& key, const PropertyValue& value)
 {
-    m_Properties[key] = value;
+    m_Properties.insert_or_assign(key, value);
 }
 
 std::optional<PropertyValue> PropertySet::Get(const std::string& key) const

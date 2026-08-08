@@ -8,8 +8,7 @@
 
 #include "SignalConnectManager.h"
 
-Element::Element() : m_Id(ElementId::InvalidId), m_Document(nullptr)
-{
+Element::Element() : m_Id(ElementId::InvalidId) {
     m_Name = "Element";
     NotifyElementChanged(MessageInfo::ElementChangeFlag::Create);
 }
@@ -91,16 +90,15 @@ const PropertySet& Element::Properties() const
 
 void Element::SetProperty(const std::string& key, const PropertyValue& value)
 {
+    const auto message = std::make_shared<MessageInfo::ElementPropertyChangePayload>(m_Id.m_Value, key, value);
+    m_ElementChangeSignal.emit(MessageInfo::ElementChangeFlag::Update, message);
     m_Properties.Set(key, value);
 }
 
-bool Element::GetProperty(const std::string& key, PropertyValue& value) const
-{
-    if (m_Properties.Exists(key))
-    {
-        value = m_Properties.Get(key);
-        return true;
+std::optional<PropertyValue> Element::GetProperty(const std::string &key) const {
+    if (m_Properties.Exists(key)) {
+        return m_Properties.Get(key);
     }
-    return false;
+    return std::nullopt;
 }
 
