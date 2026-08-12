@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include "ElementId.h"
 #include "Property/PropertySet.h"
 
 namespace MessageInfo
@@ -18,24 +19,26 @@ namespace MessageInfo
 
     struct MessagePayload
     {
+        virtual ~MessagePayload() = default;
     };
 
     struct ElementChangePayload : MessagePayload
     {
-        explicit ElementChangePayload(const uint64_t elementId) : id(elementId) {
+        explicit ElementChangePayload(const ElementId elementId) : id(std::move(elementId))
+        {
         }
 
-        uint64_t id;
+        ElementId id;
     };
 
     struct ElementPropertyChangePayload : MessagePayload {
-        explicit ElementPropertyChangePayload(const uint64_t elementId, const std::string_view propertyKey,
-                                              PropertyValue newV) : id(elementId),
+        explicit ElementPropertyChangePayload(const ElementId elementId, const std::string_view propertyKey,
+                                              PropertyValue newV) : id(std::move(elementId)),
                                                                     key(propertyKey),
                                                                     newValue(std::move(newV)) {
         }
 
-        uint64_t id;
+        ElementId id;
         std::string_view key;
         PropertyValue newValue;
     };

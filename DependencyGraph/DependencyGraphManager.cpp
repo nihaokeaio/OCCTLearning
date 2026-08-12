@@ -76,6 +76,24 @@ void DependencyGraphManager::BuildDemoGraph() {
     auto p1 = m_Sketch->CreateElement("PointElement");
     auto s0 = m_Sketch->CreateElement("SegmentElement");
     auto c0 = m_Sketch->CreateElement("CircleElement");
+    auto lambdaFun = [this](MessageInfo::ElementChangeFlag flag,
+                            const std::shared_ptr<MessageInfo::MessagePayload>& message)
+    {
+        if (auto pECPayload = dynamic_cast<MessageInfo::ElementChangePayload*>(message.get()))
+        {
+            printf("Element [%s] change! \n", pECPayload->id.ToString().c_str());
+        }
+        if (auto pEPCPayload = dynamic_cast<MessageInfo::ElementPropertyChangePayload*>(message.
+            get()))
+        {
+            printf("Element [%s] Property change! [key]= %s \n", pEPCPayload->id.ToString().c_str(),
+                   pEPCPayload->key.data());
+        }
+    };
+    MiniSignal::connect(p0, &Element::m_ElementChangeSignal, lambdaFun);
+    MiniSignal::connect(p1, &Element::m_ElementChangeSignal, lambdaFun);
+    MiniSignal::connect(s0, &Element::m_ElementChangeSignal, lambdaFun);
+    MiniSignal::connect(c0, &Element::m_ElementChangeSignal, lambdaFun);
     auto p0A = PropertyAddress{p0->GetId(), PositionProperty, ValueRole::User};
     auto p1A = PropertyAddress{p1->GetId(), PositionProperty, ValueRole::User};
     auto s0A = PropertyAddress{s0->GetId(), LengthProperty, ValueRole::DependencyGraph};
@@ -90,8 +108,12 @@ void DependencyGraphManager::BuildDemoGraph() {
     m_Segments.push_back(s0A);
     m_Circles.push_back(c0A);
 
-    p0->SetProperty(PositionProperty, gp_Pnt(0, 0, 0));
-    p1->SetProperty(PositionProperty, gp_Pnt(100, 0, 0));
+    auto pointMetaObject = m_Document->GetMetaRegister()->GetMetaObject("PointElement");
+    auto pProperty = pointMetaObject->FindProperty(PositionProperty);
+    pProperty->Write(p0, gp_Pnt(0, 0, 0));
+    pProperty->Write(p1, gp_Pnt(100, 0, 0));
+    // p0->SetProperty(PositionProperty, gp_Pnt(0, 0, 0));
+    // p1->SetProperty(PositionProperty, gp_Pnt(100, 0, 0));
 
     m_Sketch->AddSegmentComputerNode({p0A, p1A}, {s0A});
     m_Sketch->AddCircleAreaComputerNode({s0A}, {c0A});

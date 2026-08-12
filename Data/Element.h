@@ -54,6 +54,8 @@ protected:
     ElementId m_Id;
     Document* m_Document;
     PropertySet m_Properties;
+
+public:
     MiniSignal::Signal<MessageInfo::ElementChangeFlag, std::shared_ptr<MessageInfo::MessagePayload>>
     m_ElementChangeSignal;
 };

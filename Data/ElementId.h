@@ -7,9 +7,6 @@
 #include <string>
 #include <iostream>
 
-#include "MessageInfo.h"
-
-
 struct ElementId
 {
     using value_type = uint64_t;
@@ -24,6 +21,11 @@ struct ElementId
     auto operator<=>(const ElementId&) const = default;
 
     [[nodiscard]] value_type GetValue() const;
+
+    std::string ToString() const
+    {
+        return std::to_string(m_Value);
+    }
 
     static const ElementId InvalidId;
 

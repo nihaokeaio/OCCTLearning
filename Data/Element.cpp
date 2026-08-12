@@ -57,7 +57,7 @@ bool Element::HasProperty(const std::string_view key) const
 void Element::NotifyElementChanged(MessageInfo::ElementChangeFlag flag)
 {
     assert(m_Document != nullptr);
-    const auto message = std::make_shared<MessageInfo::ElementChangePayload>(m_Id.m_Value);
+    const auto message = std::make_shared<MessageInfo::ElementChangePayload>(m_Id);
     m_ElementChangeSignal.emit(flag, message);
 }
 
@@ -90,7 +90,7 @@ const PropertySet& Element::Properties() const
 
 void Element::SetProperty(const std::string& key, const PropertyValue& value)
 {
-    const auto message = std::make_shared<MessageInfo::ElementPropertyChangePayload>(m_Id.m_Value, key, value);
+    const auto message = std::make_shared<MessageInfo::ElementPropertyChangePayload>(m_Id, key, value);
     m_ElementChangeSignal.emit(MessageInfo::ElementChangeFlag::Update, message);
     m_Properties.Set(key, value);
 }
