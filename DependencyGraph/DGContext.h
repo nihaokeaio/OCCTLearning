@@ -6,11 +6,16 @@
 #include <unordered_map>
 
 
+class PropertyResolver;
+class SketchRuntime;
+class DependencyBinding;
+
 struct DGContext
 {
     using EvaluationResult = GraphExecutor::EvaluationResult;
 
-    explicit DGContext(Document *document);
+    explicit DGContext(PropertyResolver* resolver);
+    ~DGContext();
 
     bool AddValueAddress(const PropertyAddress& propertyAddress);
     bool RemoveValueAddress(const PropertyAddress& propertyAddress);
@@ -30,7 +35,7 @@ struct DGContext
     void Clear();
     EvaluationResult Evaluate();
 
-    Document *GetDocument() const;
+    PropertyResolver* GetPropertyResolver() const;
 
 private:
     ComputerNodeId AddComputerNode(std::unique_ptr<ComputerNode>&& node, std::span<PropertyAddress> inputs,
@@ -40,13 +45,9 @@ private:
     bool CanReachValue(const PropertyAddress &from, const PropertyAddress &target) const;
 
     bool WouldCreateCycle(std::span<PropertyAddress> inputs, std::span<PropertyAddress> outputs) const;
-
-    static void SetValueRole(PropertyAddress& valueAddress, ValueRole role);
-    static ValueRole GetValueRole(const PropertyAddress& valueAddress);
-
 private:
     std::unordered_set<PropertyAddress> m_Values;
     std::unordered_map<ComputerNodeId, std::unique_ptr<ComputerNode>> m_Nodes;
     std::unique_ptr<GraphExecutor> m_GraphExecutor;
-    Document *m_Document;
+    PropertyResolver* m_PropertyResolver;
 };

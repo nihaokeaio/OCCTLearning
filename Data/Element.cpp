@@ -4,28 +4,17 @@
 
 #include "Element.h"
 
-#include <cassert>
-
+#include "Document.h"
 #include "SignalConnectManager.h"
 
 Element::Element() : m_Id(ElementId::InvalidId) {
     m_Name = "Element";
-    NotifyElementChanged(MessageInfo::ElementChangeFlag::Create);
 }
 
 const MiniMetaObject::MetaObject* Element::GetStaticMetaObject() noexcept
 {
     using namespace MiniMetaObject;
-    static const MetaObject StaticMetaObject{
-        "Element", MiniMetaObject::Object::GetStaticMetaObject(),
-        {
-            MakeMemberProperty("M_Properties", &Element::m_Properties)
-        },
-        {
-            MakeMetaMethod("F_GetProperties", &Element::GetProperty),
-            MakeMetaMethod("F_SetProperties", &Element::SetProperty)
-        }
-    };
+    static const MetaObject StaticMetaObject{"Element", MiniMetaObject::Object::GetStaticMetaObject()};
     return &StaticMetaObject;
 }
 
@@ -34,10 +23,7 @@ const MiniMetaObject::MetaObject* Element::GetMetaObject() const noexcept
     return GetStaticMetaObject();
 }
 
-Element::~Element()
-{
-    NotifyElementChanged(MessageInfo::ElementChangeFlag::Remove);
-}
+Element::~Element() = default;
 
 Document* Element::GetDocument() const
 {
@@ -52,13 +38,6 @@ void Element::SetDocument(Document* doc)
 bool Element::HasProperty(const std::string_view key) const
 {
     return m_Properties.Exists(std::string(key));
-}
-
-void Element::NotifyElementChanged(MessageInfo::ElementChangeFlag flag)
-{
-    assert(m_Document != nullptr);
-    const auto message = std::make_shared<MessageInfo::ElementChangePayload>(m_Id);
-    m_ElementChangeSignal.emit(flag, message);
 }
 
 
@@ -77,22 +56,37 @@ std::string Element::GetName()
     return m_Name;
 }
 
-
-PropertySet& Element::Properties()
-{
-    return m_Properties;
-}
-
 const PropertySet& Element::Properties() const
 {
     return m_Properties;
 }
 
-void Element::SetProperty(const std::string& key, const PropertyValue& value)
+void Element::NotifyPropertyChanged(const PropertyAddress& address, const PropertyValue& oldValue,
+                                    const PropertyValue& newValue, const ChangeSource source) const
 {
-    const auto message = std::make_shared<MessageInfo::ElementPropertyChangePayload>(m_Id, key, value);
-    m_ElementChangeSignal.emit(MessageInfo::ElementChangeFlag::Update, message);
+    m_Document->NotifyElementPropertyChanged(MessageInfo::PropertyChangePayload{
+        {GetId(), address.propertyName},
+        oldValue,
+        newValue,
+        source
+    });
+}
+
+bool Element::SetProperty(const std::string& key, const PropertyValue& value, ChangeSource source)
+{
+    const auto oldValue = m_Properties.Get(key);
+    if (!oldValue)
+        return false;
     m_Properties.Set(key, value);
+    NotifyPropertyChanged({GetId(), key}, oldValue, value, source);
+    return true;
+}
+
+bool Element::SetPropertyDirectly(const std::string& key, const PropertyValue& value)
+{
+    // 直接写入不再做检查
+    m_Properties.Set(key, value);
+    return true;
 }
 
 std::optional<PropertyValue> Element::GetProperty(const std::string &key) const {

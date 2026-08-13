@@ -7,7 +7,11 @@
 #include <unordered_map>
 
 #include "ElementId.h"
+#include "MessageInfo.h"
+#include "SignalConnectManager.h"
 
+
+class PropertyResolver;
 
 namespace MiniMetaObject {
     class RegisterObject;
@@ -19,6 +23,7 @@ class Document
 {
 public:
     Document();
+    ~Document();
 
     void RegisterElement(std::unique_ptr<Element>&& element);
 
@@ -32,6 +37,13 @@ public:
     T* FindElement(const ElementId& elementId);
 
     MiniMetaObject::RegisterObject *GetMetaRegister() const;
+
+    void NotifyElementChanged(ElementId elementId, MessageInfo::ElementChangeFlag flag);
+    void NotifyElementPropertyChanged(const MessageInfo::PropertyChangePayload& message);
+
+public:
+    MiniSignal::Signal<MessageInfo::ElementChangePayload> m_ElementChangedSignal;
+    MiniSignal::Signal<const MessageInfo::PropertyChangePayload&> m_ElementPropertyChangedSignal;
 
 private:
     std::unordered_map<ElementId, std::unique_ptr<Element>> m_Elements;

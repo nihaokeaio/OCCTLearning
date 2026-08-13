@@ -4,7 +4,6 @@
 
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepPrimAPI_MakeSphere.hxx>
-#include <Quantity_Color.hxx>
 #include <TCollection_ExtendedString.hxx>
 #include <TopoDS_Shape.hxx>
 
@@ -14,6 +13,7 @@
 
 #include "Data/Element.h"
 #include "Data/Document.h"
+#include "Demo/SketchRuntime.h"
 
 namespace
 {
@@ -54,8 +54,7 @@ namespace
 }
 
 DependencyGraphManager::DependencyGraphManager() {
-    m_Document = std::make_unique<Document>();
-    m_Context = std::make_unique<DGContext>(m_Document.get());
+    m_SketchRuntime = std::make_unique<SketchRuntime>();
 }
 
 DependencyGraphManager::~DependencyGraphManager() = default;
@@ -66,64 +65,45 @@ void DependencyGraphManager::InitializeDemoScene(const Handle(AIS_InteractiveCon
     BuildDemoGraph();
 }
 
-void DependencyGraphManager::BuildDemoGraph() {
-    m_Context->Clear();
-    m_Sketch = std::make_unique<SketchModel>(m_Context.get(), m_Document.get());
+void DependencyGraphManager::BuildDemoGraph()
+{
+    const auto sketch = m_SketchRuntime->GetSketchModel();
     m_Points.clear();
     m_Segments.clear();
 
-    auto p0 = m_Sketch->CreateElement("PointElement");
-    auto p1 = m_Sketch->CreateElement("PointElement");
-    auto s0 = m_Sketch->CreateElement("SegmentElement");
-    auto c0 = m_Sketch->CreateElement("CircleElement");
-    auto lambdaFun = [this](MessageInfo::ElementChangeFlag flag,
-                            const std::shared_ptr<MessageInfo::MessagePayload>& message)
+    auto p0 = sketch->CreateElement("PointElement");
+    auto p1 = sketch->CreateElement("PointElement");
+    auto s0 = sketch->CreateElement("SegmentElement");
+    auto c0 = sketch->CreateElement("CircleElement");
+    auto lambdaFun = [this](const MessageInfo::PropertyChangePayload& message)
     {
-        if (auto pECPayload = dynamic_cast<MessageInfo::ElementChangePayload*>(message.get()))
-        {
-            printf("Element [%s] change! \n", pECPayload->id.ToString().c_str());
-        }
-        if (auto pEPCPayload = dynamic_cast<MessageInfo::ElementPropertyChangePayload*>(message.
-            get()))
-        {
-            printf("Element [%s] Property change! [key]= %s \n", pEPCPayload->id.ToString().c_str(),
-                   pEPCPayload->key.data());
-        }
+        printf("Element [%s] Property change! [key]= %s \n", message.address.elementId.ToString().c_str(),
+               message.address.propertyName.c_str());
     };
-    MiniSignal::connect(p0, &Element::m_ElementChangeSignal, lambdaFun);
-    MiniSignal::connect(p1, &Element::m_ElementChangeSignal, lambdaFun);
-    MiniSignal::connect(s0, &Element::m_ElementChangeSignal, lambdaFun);
-    MiniSignal::connect(c0, &Element::m_ElementChangeSignal, lambdaFun);
-    auto p0A = PropertyAddress{p0->GetId(), PositionProperty, ValueRole::User};
-    auto p1A = PropertyAddress{p1->GetId(), PositionProperty, ValueRole::User};
-    auto s0A = PropertyAddress{s0->GetId(), LengthProperty, ValueRole::DependencyGraph};
-    auto c0A = PropertyAddress{c0->GetId(), AreaProperty, ValueRole::DependencyGraph};
-    m_Sketch->AddPropertyAddress(p0A);
-    m_Sketch->AddPropertyAddress(p1A);
-    m_Sketch->AddPropertyAddress(s0A);
-    m_Sketch->AddPropertyAddress(c0A);
+    MiniSignal::connect(m_SketchRuntime->GetDocument(), &Document::m_ElementPropertyChangedSignal, lambdaFun);
+    auto p0A = PropertyAddress{p0->GetId(), PositionProperty};
+    auto p1A = PropertyAddress{p1->GetId(), PositionProperty};
+    auto s0A = PropertyAddress{s0->GetId(), LengthProperty};
+    auto c0A = PropertyAddress{c0->GetId(), AreaProperty};
+    sketch->AddPropertyAddress(p0A);
+    sketch->AddPropertyAddress(p1A);
+    sketch->AddPropertyAddress(s0A);
+    sketch->AddPropertyAddress(c0A);
 
     m_Points.push_back(p0A);
     m_Points.push_back(p1A);
     m_Segments.push_back(s0A);
     m_Circles.push_back(c0A);
 
-    auto pointMetaObject = m_Document->GetMetaRegister()->GetMetaObject("PointElement");
-    auto pProperty = pointMetaObject->FindProperty(PositionProperty);
-    pProperty->Write(p0, gp_Pnt(0, 0, 0));
-    pProperty->Write(p1, gp_Pnt(100, 0, 0));
-    // p0->SetProperty(PositionProperty, gp_Pnt(0, 0, 0));
-    // p1->SetProperty(PositionProperty, gp_Pnt(100, 0, 0));
+    m_SketchRuntime->SetProperty(p0A, gp_Pnt(0, 0, 0), ChangeSource::User);
+    m_SketchRuntime->SetProperty(p1A, gp_Pnt(100, 0, 0), ChangeSource::User);
 
-    m_Sketch->AddSegmentComputerNode({p0A, p1A}, {s0A});
-    m_Sketch->AddCircleAreaComputerNode({s0A}, {c0A});
-    m_Sketch->MarkDirty(p0A);
+    sketch->AddSegmentComputerNode({p0A, p1A}, {s0A});
+    sketch->AddCircleAreaComputerNode({s0A}, {c0A});
 }
 
-void DependencyGraphManager::EvaluateAndRefreshScene() const {
-    if (!m_Sketch) {
-        return;
-    }
-    const auto result = m_Sketch->Evaluate();
+void DependencyGraphManager::EvaluateAndRefreshScene() const
+{
+    const auto result = m_SketchRuntime->Flush();
 }
 

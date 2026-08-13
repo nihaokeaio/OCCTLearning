@@ -14,6 +14,8 @@ class SketchModel
 public:
     explicit SketchModel(DGContext *context, Document *document);
 
+    void BuildDemoGraph();
+
     Element *CreateElement(std::string_view elementName) const;
 
     void AddPropertyAddress(PropertyAddress address) const;
@@ -21,10 +23,6 @@ public:
     void AddSegmentComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out) const;
 
     void AddCircleAreaComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out) const;
-
-    DGContext::EvaluationResult Evaluate() const;
-
-    void MarkDirty(PropertyAddress node) const;
 
 private:
     DGContext *m_Context;

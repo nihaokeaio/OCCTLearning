@@ -5,11 +5,11 @@
 #include "ComputerView.h"
 #include "DGContext.h"
 #include <stdexcept>
-#include "Data/Document.h"
 #include "Data/Element.h"
+#include "Data/Property/PropertyResolver.h"
 
-ComputerView::ComputerView(Document* document, std::span<PropertyAddress> inputs, std::span<PropertyAddress> outputs):
-    m_Document(document),
+ComputerView::ComputerView(DGContext* context, std::span<PropertyAddress> inputs, std::span<PropertyAddress> outputs):
+    m_DGContext(context),
     m_Inputs(std::move(inputs)),
     m_Outputs(std::move(outputs))
 {
@@ -29,25 +29,12 @@ std::optional<PropertyValue> ComputerView::Out(size_t index) const
 
 std::optional<PropertyValue> ComputerView::GetValue(const PropertyAddress& address) const
 {
-    const auto elementId = address.elementId;
-    const auto& key = address.propertyName;
-    if (const auto element = m_Document->FindElement(elementId))
-    {
-        return element->GetProperty(key);
-    }
-    return std::nullopt;
+    return m_DGContext->GetPropertyResolver()->Read(address);
 }
 
 bool ComputerView::SetValue(const PropertyAddress& address, const PropertyValue& value) const
 {
-    const auto elementId = address.elementId;
-    const auto& key = address.propertyName;
-    if (const auto element = m_Document->FindElement(elementId))
-    {
-        element->SetProperty(key, value);
-        return true;
-    }
-    return false;
+    return m_DGContext->GetPropertyResolver()->Write(address, value, ChangeSource::DependencyGraph);
 }
 
 

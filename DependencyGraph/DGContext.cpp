@@ -2,14 +2,16 @@
 #include "DependencyGraph//DGContext.h"
 
 #include <queue>
-#include <sstream>
 #include <unordered_set>
 #include <utility>
 
 
-DGContext::DGContext(Document *document) : m_Document(document) {
+DGContext::DGContext(PropertyResolver* resolver): m_PropertyResolver(resolver)
+{
     m_GraphExecutor = std::make_unique<GraphExecutor>();
 }
+
+DGContext::~DGContext() = default;
 
 bool DGContext::AddValueAddress(const PropertyAddress& propertyAddress)
 {
@@ -77,11 +79,12 @@ bool DGContext::RemoveComputeNode(const ComputerNodeId &nodeId) {
     m_GraphExecutor->RemoveComputerNode(nodeId);
     m_Nodes.erase(iter);
 
-    for (auto &outputId: outputs) {
-        if (m_Values.contains(outputId) && m_GraphExecutor->FindProducerNode(outputId) == nullptr) {
-            SetValueRole(outputId, ValueRole::User);
-        }
-    }
+    // for (auto &outputId: outputs) {
+    //     if (m_Values.contains(outputId) && m_GraphExecutor->FindProducerNode(outputId) == nullptr)
+    //     {
+    //         SetValueRole(outputId, ChangeSource::User);
+    //     }
+    // }
     return true;
 }
 
@@ -123,8 +126,8 @@ ComputerNodeId DGContext::AddComputerNode(std::unique_ptr<ComputerNode>&& node, 
         m_GraphExecutor->AddDependentNode(inputId, node->m_Id);
     }
 
-    for (auto &outputId: outputs) {
-        SetValueRole(outputId, ValueRole::DependencyGraph);
+    for (auto& outputId : outputs)
+    {
         m_GraphExecutor->AddNodeOutput(node->m_Id, outputId);
     }
     const auto id = node->m_Id;
@@ -180,19 +183,6 @@ bool DGContext::WouldCreateCycle(std::span<PropertyAddress> inputs, std::span<Pr
     return false;
 }
 
-void DGContext::SetValueRole(PropertyAddress& valueAddress, const ValueRole role)
-{
-    valueAddress.valueRole = role;
-}
-
-ValueRole DGContext::GetValueRole(const PropertyAddress& valueAddress)
-{
-    return valueAddress.valueRole;
-}
-
-
-
-
 void DGContext::Clear()
 {
     m_Values.clear();
@@ -205,6 +195,7 @@ DGContext::EvaluationResult DGContext::Evaluate()
     return m_GraphExecutor->Evaluate(this);
 }
 
-Document *DGContext::GetDocument() const {
-    return m_Document;;
+PropertyResolver* DGContext::GetPropertyResolver() const
+{
+    return m_PropertyResolver;
 }

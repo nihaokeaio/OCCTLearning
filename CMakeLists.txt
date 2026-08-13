@@ -20,8 +20,32 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/*.h"
 )
 
+file(GLOB_RECURSE SKETCH_CORE_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/Data/*.cpp"
+        "${CMAKE_SOURCE_DIR}/Demo/*.cpp"
+        "${CMAKE_SOURCE_DIR}/DependencyGraph/*.cpp"
+)
+
+add_library(SketchCore STATIC
+        ${SKETCH_CORE_SOURCES}
+)
+
+target_include_directories(SketchCore PUBLIC
+        ${CMAKE_SOURCE_DIR}
+)
+
+# Link libraries
+target_link_libraries(SketchCore
+        PUBLIC TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKMesh TKService TKOpenGl TKV3d
+        glfw
+)
+
+target_compile_features(SketchCore PUBLIC cxx_std_20)
+
+
 # Exclude CMake-generated files from the SOURCES list
 list(FILTER SOURCES EXCLUDE REGEX ".*CMakeFiles.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/test/.*")
 
 # Add executable target
 add_executable(OcctImgui ${SOURCES})
@@ -31,9 +55,8 @@ target_include_directories(OcctImgui PRIVATE
 )
 
 # Link libraries
-target_link_libraries(OcctImgui
-PRIVATE    TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKMesh TKService TKOpenGl TKV3d
-  glfw
+target_link_libraries(OcctImgui PRIVATE
+        SketchCore
 )
 
 target_compile_options(OcctImgui PRIVATE
@@ -65,3 +88,30 @@ if(WIN32)
     endif()
 endif()
 
+include(CTest)
+
+if (BUILD_TESTING)
+    include(FetchContent)
+    find_package(OpenCASCADE REQUIRED)
+    FetchContent_Declare(
+            googletest
+            URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+    )
+    # 避免 Windows 下 GoogleTest 修改父项目的运行库配置
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
+    FetchContent_MakeAvailable(googletest)
+
+    add_executable(SketchRuntimeTest
+            test/SketchRuntimeTest.cpp
+    )
+
+
+    target_link_libraries(SketchRuntimeTest PRIVATE
+            SketchCore
+            GTest::gtest_main
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(SketchRuntimeTest)
+endif ()

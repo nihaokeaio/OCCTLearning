@@ -14,6 +14,8 @@
 #include <unordered_set>
 #include <vector>
 
+class SketchRuntime;
+
 class DependencyGraphManager
 {
 public:
@@ -29,9 +31,7 @@ private:
     void BuildDemoGraph();
 
 private:
-    std::unique_ptr<DGContext> m_Context;
-    std::unique_ptr<SketchModel> m_Sketch;
-    std::unique_ptr<Document> m_Document;
+    std::unique_ptr<SketchRuntime> m_SketchRuntime;
     Handle(AIS_InteractiveContext) m_AisContext;
     std::vector<PropertyAddress> m_Points;
     std::vector<PropertyAddress> m_Segments;

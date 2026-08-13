@@ -69,7 +69,7 @@ public:
             {
                 return false;
             }
-            owner->SetProperty(key, *typedValue);
+            owner->SetPropertyDirectly(key, *typedValue);
             return true;
         };
         return MetaProperty(name, GetMetaType<T>(), accessorGetter, accessorSetter);

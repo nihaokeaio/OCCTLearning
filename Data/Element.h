@@ -37,27 +37,29 @@ public:
 
     std::string GetName();
 
-    [[nodiscard]] PropertySet& Properties();
-
     [[nodiscard]] const PropertySet& Properties() const;
 
-    void SetProperty(const std::string& key, const PropertyValue& value);
+    void NotifyPropertyChanged(const PropertyAddress& address, const PropertyValue& oldValue,
+                               const PropertyValue& newValue, ChangeSource source) const;
 
-    std::optional<PropertyValue> GetProperty(const std::string &key) const;
+
+    bool SetPropertyDirectly(const std::string& key, const PropertyValue& value);
+
+    [[nodiscard]] std::optional<PropertyValue> GetProperty(const std::string& key) const;
 
     [[nodiscard]] bool HasProperty(std::string_view key) const;
 
-    void NotifyElementChanged(MessageInfo::ElementChangeFlag);
+private:
+    bool SetProperty(const std::string& key, const PropertyValue& value, ChangeSource source);
 
 protected:
     std::string m_Name;
     ElementId m_Id;
-    Document* m_Document;
+    Document* m_Document = nullptr;
     PropertySet m_Properties;
 
 public:
-    MiniSignal::Signal<MessageInfo::ElementChangeFlag, std::shared_ptr<MessageInfo::MessagePayload>>
-    m_ElementChangeSignal;
+    MiniSignal::Signal<const MessageInfo::PropertyChangePayload&> m_PropertyChanged;
 };
 
 

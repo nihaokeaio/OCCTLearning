@@ -10,10 +10,10 @@
 
 ComputerNode::ComputerNode(std::vector<PropertyAddress> inputs, std::vector<PropertyAddress> outputs,
                            ComputeFunc computeFunc):
+    m_Id(Document::NewElementId()),
     m_Inputs(std::move(inputs)),
     m_Outputs(std::move(outputs)),
-    computeFunc(std::move(computeFunc)),
-    m_Id(Document::NewElementId())
+    computeFunc(std::move(computeFunc))
 {
 }
 
@@ -24,6 +24,6 @@ void ComputerNode::Evaluator(DGContext& context)
         throw std::runtime_error("ComputerNode has no compute function");
     }
 
-    const ComputerView view(context.GetDocument(), m_Inputs, m_Outputs);
+    const ComputerView view(&context, m_Inputs, m_Outputs);
     computeFunc(view);
 }

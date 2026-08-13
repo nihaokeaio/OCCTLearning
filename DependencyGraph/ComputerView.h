@@ -12,7 +12,7 @@ struct ValueHandle;
 
 struct ComputerView
 {
-    ComputerView(Document* document, std::span<PropertyAddress> inputs, std::span<PropertyAddress> outputs);
+    ComputerView(DGContext* context, std::span<PropertyAddress> inputs, std::span<PropertyAddress> outputs);
 
     template <typename T>
     T Input(size_t index) const;
@@ -35,7 +35,7 @@ private:
     [[nodiscard]] bool SetValue(const PropertyAddress& address, const PropertyValue& value) const;
 
 private:
-    Document* m_Document = nullptr;
+    DGContext* m_DGContext = nullptr;
     std::span<PropertyAddress> m_Inputs;
     std::span<PropertyAddress> m_Outputs;
 };
@@ -67,5 +67,8 @@ template <typename T>
 void ComputerView::SetOutput(size_t index, const T& value) const
 {
     const auto& address = OutId(index);
-    SetValue(address, value);
+    if (!SetValue(address, value))
+    {
+        std::cout << "Failed to set output value" << std::endl;
+    }
 }

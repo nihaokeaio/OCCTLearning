@@ -16,6 +16,8 @@ Document::Document() {
     m_MetaRegister->Register<CircleElement>();
 }
 
+Document::~Document() = default;
+
 void Document::RegisterElement(std::unique_ptr<Element>&& element)
 {
     if (element->GetId() == ElementId::InvalidId)
@@ -25,14 +27,14 @@ void Document::RegisterElement(std::unique_ptr<Element>&& element)
     auto rawElement = element.get();
     element->SetDocument(this);
     m_Elements.insert(std::make_pair(element->GetId(), std::move(element)));
-    rawElement->NotifyElementChanged(MessageInfo::ElementChangeFlag::Register);
+    NotifyElementChanged(rawElement->GetId(), MessageInfo::ElementChangeFlag::Register);
 }
 
 std::unique_ptr<Element> Document::UnregisterElement(const ElementId& elementId)
 {
     if (const auto it = m_Elements.find(elementId); it != m_Elements.end())
     {
-        it->second->NotifyElementChanged(MessageInfo::ElementChangeFlag::Unregister);
+        NotifyElementChanged(elementId, MessageInfo::ElementChangeFlag::Unregister);
         auto element = std::move(it->second);
         m_Elements.erase(it);
         element->SetDocument(nullptr);
@@ -57,4 +59,14 @@ Element* Document::FindElement(const ElementId& elementId)
 
 MiniMetaObject::RegisterObject *Document::GetMetaRegister() const {
     return m_MetaRegister.get();
+}
+
+void Document::NotifyElementChanged(const ElementId elementId, MessageInfo::ElementChangeFlag flag)
+{
+    m_ElementChangedSignal.emit({flag, elementId});
+}
+
+void Document::NotifyElementPropertyChanged(const MessageInfo::PropertyChangePayload& message)
+{
+    m_ElementPropertyChangedSignal.emit(message);
 }

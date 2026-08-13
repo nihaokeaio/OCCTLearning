@@ -33,11 +33,3 @@ void SketchModel::AddCircleAreaComputerNode(std::vector<PropertyAddress> in, std
         view.SetOutput(0, std::numbers::pi * radiusLength * radiusLength);
     });
 }
-
-DGContext::EvaluationResult SketchModel::Evaluate() const {
-    return m_Context->Evaluate();
-}
-
-void SketchModel::MarkDirty(PropertyAddress node) const {
-    m_Context->MarkDirty(std::move(node));
-}
