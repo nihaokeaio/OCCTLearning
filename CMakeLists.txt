@@ -36,8 +36,7 @@ target_include_directories(SketchCore PUBLIC
 
 # Link libraries
 target_link_libraries(SketchCore
-        PUBLIC TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKMesh TKService TKOpenGl TKV3d
-        glfw
+        PUBLIC TKernel
 )
 
 target_compile_features(SketchCore PUBLIC cxx_std_20)
@@ -46,6 +45,9 @@ target_compile_features(SketchCore PUBLIC cxx_std_20)
 # Exclude CMake-generated files from the SOURCES list
 list(FILTER SOURCES EXCLUDE REGEX ".*CMakeFiles.*")
 list(FILTER SOURCES EXCLUDE REGEX ".*/test/.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/Data/.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/Demo/.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/DependencyGraph/.*")
 
 # Add executable target
 add_executable(OcctImgui ${SOURCES})
@@ -57,6 +59,8 @@ target_include_directories(OcctImgui PRIVATE
 # Link libraries
 target_link_libraries(OcctImgui PRIVATE
         SketchCore
+        TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo TKPrim TKMesh TKService TKOpenGl TKV3d
+        glfw
 )
 
 target_compile_options(OcctImgui PRIVATE
@@ -104,6 +108,7 @@ if (BUILD_TESTING)
 
     add_executable(SketchRuntimeTest
             test/SketchRuntimeTest.cpp
+            test/SketchRuntimeBaseFixture.cpp
     )
 
 

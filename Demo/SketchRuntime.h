@@ -35,8 +35,8 @@ private:
 
 private:
     std::unique_ptr<Document> m_Document;
-    std::unique_ptr<DGContext> m_DGContext;
     std::unique_ptr<PropertyResolver> m_PropertyResolver;
+    std::unique_ptr<DGContext> m_DGContext;
     std::unique_ptr<DependencyBinding> m_DependencyBinding;
     std::unique_ptr<SketchModel> m_SketchModel;
 };

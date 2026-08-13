@@ -307,13 +307,21 @@ namespace MiniMetaObject
     {
       if (!type)
         return std::nullopt;
-      auto value = type->Deserialize(serializedValue);
+      const auto value = type->Deserialize(serializedValue);
       if (!value)
         return std::nullopt;
       if (std::type_index(value->type()) != type->TypeId())
         return std::nullopt;
 
       return MetaValue{std::move(*value), type};
+    }
+
+    template <typename T>
+    bool Equal(MetaValue& value)
+    {
+      if (!Is<T>() || !value.Is<T>())
+        return false;
+      return *std::any_cast<T>(&m_Value) == *std::any_cast<T>(value.m_Value);
     }
 
   private:

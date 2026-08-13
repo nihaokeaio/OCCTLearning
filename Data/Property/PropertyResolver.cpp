@@ -34,11 +34,14 @@ bool PropertyResolver::Write(const PropertyAddress& address, const PropertyValue
     if (metaProperty->Type() != value.Type())
         return false;
 
-    PropertyValue oldValue = metaProperty->Read(element);
+    const PropertyValue oldValue = metaProperty->Read(element);
 
     if (!metaProperty->Write(element, value))
         return false;
-    element->NotifyPropertyChanged(address, oldValue, value, source);
+    // 写入后重新读取
+    const PropertyValue newValue = metaProperty->Read(element);
+    // 暂时不知道如何比较newValue与value的值
+    element->NotifyPropertyChanged(address, oldValue, newValue, source);
     return true;
 }
 
