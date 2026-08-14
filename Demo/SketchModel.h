@@ -24,6 +24,9 @@ public:
 
     void AddCircleAreaComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out) const;
 
+    void AddComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out,
+                         ComputerNode::ComputeFunc computeFunc) const;
+
 private:
     DGContext *m_Context;
     Document *m_Document;

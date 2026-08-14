@@ -40,7 +40,7 @@ bool PropertyResolver::Write(const PropertyAddress& address, const PropertyValue
         return false;
     // 写入后重新读取
     const PropertyValue newValue = metaProperty->Read(element);
-    // 暂时不知道如何比较newValue与value的值
+    // 待需要时添加比较操作
     element->NotifyPropertyChanged(address, oldValue, newValue, source);
     return true;
 }

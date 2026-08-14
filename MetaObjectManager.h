@@ -316,14 +316,6 @@ namespace MiniMetaObject
       return MetaValue{std::move(*value), type};
     }
 
-    template <typename T>
-    bool Equal(MetaValue& value)
-    {
-      if (!Is<T>() || !value.Is<T>())
-        return false;
-      return *std::any_cast<T>(&m_Value) == *std::any_cast<T>(value.m_Value);
-    }
-
   private:
     MetaValue(std::any value, const MetaType* type): m_Value(std::move(value)), m_Type(type)
     {

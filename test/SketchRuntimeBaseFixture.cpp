@@ -7,6 +7,7 @@
 #include "Demo/SketchModel.h"
 #include "Demo/SketchRuntime.h"
 #include "Data/Property/PropertyResolver.h"
+#include "Demo/domain/GeneralComputer.h"
 
 void SketchRuntimeBaseFixture::SetUp()
 {
@@ -32,8 +33,8 @@ void SketchRuntimeBaseFixture::SetUp()
     sketch->AddPropertyAddress(p1Position);
     sketch->AddPropertyAddress(s0Length);
     sketch->AddPropertyAddress(c0Area);
-    sketch->AddSegmentComputerNode({p0Position, p1Position}, {s0Length});
-    sketch->AddCircleAreaComputerNode({s0Length}, {c0Area});
+    sketch->AddComputerNode({p0Position, p1Position}, {s0Length}, DistanceComputer());
+    sketch->AddComputerNode({s0Length}, {c0Area}, CircleAreaComputer());
 }
 
 void SketchRuntimeBaseFixture::SetEndPoint(gp_Pnt p0, gp_Pnt p1) const

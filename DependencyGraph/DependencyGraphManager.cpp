@@ -14,6 +14,7 @@
 #include "Data/Element.h"
 #include "Data/Document.h"
 #include "Demo/SketchRuntime.h"
+#include "Demo/domain/GeneralComputer.h"
 
 namespace
 {
@@ -98,8 +99,8 @@ void DependencyGraphManager::BuildDemoGraph()
     m_SketchRuntime->SetProperty(p0A, gp_Pnt(0, 0, 0), ChangeSource::User);
     m_SketchRuntime->SetProperty(p1A, gp_Pnt(100, 0, 0), ChangeSource::User);
 
-    sketch->AddSegmentComputerNode({p0A, p1A}, {s0A});
-    sketch->AddCircleAreaComputerNode({s0A}, {c0A});
+    sketch->AddComputerNode({p0A, p1A}, {s0A}, DistanceComputer());
+    sketch->AddComputerNode({s0A}, {c0A}, CircleAreaComputer());
 }
 
 void DependencyGraphManager::EvaluateAndRefreshScene() const

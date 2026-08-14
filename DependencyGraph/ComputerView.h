@@ -48,7 +48,7 @@ T ComputerView::Input(size_t index) const
             return *result;
         }
     }
-    return T();
+    throw std::logic_error("Invalid input");
 }
 
 template <typename T>
@@ -59,7 +59,7 @@ T ComputerView::Output(size_t index) const
             return *result;
         }
     }
-    return T();
+    throw std::logic_error("Invalid Output");
 }
 
 template <typename T>

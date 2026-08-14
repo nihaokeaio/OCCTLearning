@@ -10,6 +10,8 @@
 #include <gp_Pnt.hxx>
 #include <numbers>
 
+#include "Demo/domain/GeneralComputer.h"
+
 
 TEST(SketchRuntimeTest, UserPropertyChangePropagatesThroughDependencyGraph)
 {
@@ -33,9 +35,8 @@ TEST(SketchRuntimeTest, UserPropertyChangePropagatesThroughDependencyGraph)
     sketch->AddPropertyAddress(s0Length);
     sketch->AddPropertyAddress(c0Area);
 
-    sketch->AddSegmentComputerNode({p0Position, p1Position}, {s0Length});
-
-    sketch->AddCircleAreaComputerNode({s0Length}, {c0Area});
+    sketch->AddComputerNode({p0Position, p1Position}, {s0Length}, DistanceComputer());
+    sketch->AddComputerNode({s0Length}, {c0Area}, CircleAreaComputer());
 
     EXPECT_TRUE(runtime.SetProperty(p0Position,gp_Pnt{0, 0, 0},ChangeSource::User));
 

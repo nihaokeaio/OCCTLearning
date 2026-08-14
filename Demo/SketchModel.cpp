@@ -33,3 +33,9 @@ void SketchModel::AddCircleAreaComputerNode(std::vector<PropertyAddress> in, std
         view.SetOutput(0, std::numbers::pi * radiusLength * radiusLength);
     });
 }
+
+void SketchModel::AddComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out,
+                                  ComputerNode::ComputeFunc computeFunc) const
+{
+    m_Context->AddComputeNode(std::move(in), std::move(out), std::move(computeFunc));
+}
