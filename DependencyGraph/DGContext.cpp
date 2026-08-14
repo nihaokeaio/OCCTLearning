@@ -45,9 +45,9 @@ bool DGContext::HasValue(const PropertyAddress& id) const
 }
 
 ComputerNodeId DGContext::AddComputeNode(std::vector<PropertyAddress> inputs, std::vector<PropertyAddress> outputs,
-                                         ComputerNode::ComputeFunc computeFunc)
+                                         ComputerNode::ComputeFunc computeFunc, std::string debugName)
 {
-    auto node = std::make_unique<ComputerNode>(inputs, outputs, computeFunc);
+    auto node = std::make_unique<ComputerNode>(inputs, outputs, std::move(computeFunc), std::move(debugName));
     return AddComputerNode(std::move(node), inputs, outputs);
 }
 

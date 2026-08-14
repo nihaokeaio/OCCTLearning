@@ -2,6 +2,7 @@
 
 
 #include <queue>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -13,11 +14,20 @@ struct DGContext;
 
 struct GraphExecutor
 {
+    struct NodeEvaluationTrace
+    {
+        ComputerNodeId nodeId;
+        std::string nodeName;
+        std::size_t batchIndex = 0;
+        std::vector<PropertyAddress> triggeredBy;
+        std::vector<PropertyAddress> outputs;
+    };
 
     struct EvaluationResult
     {
         bool evaluated = false;
         std::unordered_set<PropertyAddress> changedValues;
+        std::vector<NodeEvaluationTrace> nodeTraces;
     };
 
     void MarkDirty(const PropertyAddress& address);
@@ -41,7 +51,8 @@ private:
                            std::unordered_set<ComputerNodeId>& dirtyNodeIds);
     // 按已经排好的 batch 顺序执行节点，并把输出 value 继续标脏，驱动下一批。
     void EvaluateDirtyNodes(DGContext* context, std::queue<ComputerNodeId>& dirtyNodeQueue,
-                            const std::unordered_set<ComputerNodeId>& currentBatchNodeIds);
+                            const std::unordered_set<ComputerNodeId>& currentBatchNodeIds,
+                            std::size_t batchIndex, EvaluationResult& result);
 
     // 只在本批 dirty 节点内部做拓扑排序，保证“生产某个输入的节点”先于“消费它的节点”执行。
     void BatchNodeSort(std::queue<ComputerNodeId>& dirtyNodeQueue,

@@ -23,7 +23,8 @@ struct DGContext
 
     ComputerNodeId AddComputeNode(std::vector<PropertyAddress> inputs,
                                   std::vector<PropertyAddress> outputs,
-                                  ComputerNode::ComputeFunc computeFunc);
+                                  ComputerNode::ComputeFunc computeFunc,
+                                  std::string debugName = {});
 
     [[nodiscard]] ComputerNode* GetComputerNode(const ComputerNodeId& id);
     [[nodiscard]] bool RemoveComputeNode(const ComputerNodeId& nodeId);

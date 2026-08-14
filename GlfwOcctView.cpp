@@ -230,6 +230,7 @@ void GlfwOcctView::renderGui()
 
     if (myDependencyGraphManager != nullptr)
     {
+        myDependencyGraphManager->DrawImGui();
     }
 
     ImGui::Render();

@@ -32,7 +32,7 @@ GraphExecutor::EvaluationResult GraphExecutor::Evaluate(DGContext* context)
         {
             result.evaluated = true;
         }
-        EvaluateDirtyNodes(context, dirtyNodeQueue, dirtyNodeIds);
+        EvaluateDirtyNodes(context, dirtyNodeQueue, dirtyNodeIds, batchIndex, result);
     }
     result.changedValues = m_ChangedValues;
     m_ChangedValues.clear();
@@ -193,7 +193,8 @@ void GraphExecutor::CollectDirtyNodes(std::queue<ComputerNodeId>& dirtyNodeQueue
 }
 
 void GraphExecutor::EvaluateDirtyNodes(DGContext* context, std::queue<ComputerNodeId>& dirtyNodeQueue,
-                                       const std::unordered_set<ComputerNodeId>& currentBatchNodeIds)
+                                       const std::unordered_set<ComputerNodeId>& currentBatchNodeIds,
+                                       const std::size_t batchIndex, EvaluationResult& result)
 {
     while (!dirtyNodeQueue.empty())
     {
@@ -202,6 +203,21 @@ void GraphExecutor::EvaluateDirtyNodes(DGContext* context, std::queue<ComputerNo
 
         const auto node = context->GetComputerNode(computerNodeId);
         node->Evaluator(*context);
+
+        NodeEvaluationTrace trace{
+            computerNodeId,
+            node->m_DebugName,
+            batchIndex,
+            {},
+            node->m_Outputs
+        };
+        if (const auto triggerIter = m_NodeTriggerValues.find(computerNodeId);
+            triggerIter != m_NodeTriggerValues.end())
+        {
+            trace.triggeredBy.assign(triggerIter->second.begin(), triggerIter->second.end());
+            m_NodeTriggerValues.erase(triggerIter);
+        }
+        result.nodeTraces.emplace_back(std::move(trace));
 
         auto outputIter = nodeOutputs.find(computerNodeId);
         if (outputIter != nodeOutputs.end())

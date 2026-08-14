@@ -9,8 +9,9 @@
 #include "Data/Document.h"
 
 ComputerNode::ComputerNode(std::vector<PropertyAddress> inputs, std::vector<PropertyAddress> outputs,
-                           ComputeFunc computeFunc):
+                           ComputeFunc computeFunc, std::string debugName):
     m_Id(Document::NewElementId()),
+    m_DebugName(std::move(debugName)),
     m_Inputs(std::move(inputs)),
     m_Outputs(std::move(outputs)),
     computeFunc(std::move(computeFunc))

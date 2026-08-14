@@ -62,3 +62,22 @@ const MiniMetaObject::MetaObject *CircleElement::GetStaticMetaObject() noexcept 
 const MiniMetaObject::MetaObject *CircleElement::GetMetaObject() const noexcept {
     return GetStaticMetaObject();
 }
+
+MetricsElement::MetricsElement() {
+    m_Properties.Set("TotalLength", 0.0);
+}
+
+const MiniMetaObject::MetaObject *MetricsElement::GetStaticMetaObject() noexcept {
+    using namespace MiniMetaObject;
+    static const MetaObject StaticMetaObject{
+        "MetricsElement", Element::GetStaticMetaObject(),
+        {
+            PropertySet::MakeMetaProperty<MetricsElement, double>("TotalLength", "TotalLength")
+        }
+    };
+    return &StaticMetaObject;
+}
+
+const MiniMetaObject::MetaObject *MetricsElement::GetMetaObject() const noexcept {
+    return GetStaticMetaObject();
+}

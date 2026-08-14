@@ -14,6 +14,7 @@ Document::Document() {
     m_MetaRegister->Register<PointElement>();
     m_MetaRegister->Register<SegmentElement>();
     m_MetaRegister->Register<CircleElement>();
+    m_MetaRegister->Register<MetricsElement>();
 }
 
 Document::~Document() = default;

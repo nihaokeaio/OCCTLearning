@@ -37,4 +37,13 @@ public:
     [[nodiscard]] const MiniMetaObject::MetaObject *GetMetaObject() const noexcept override;
 };
 
+class MetricsElement : public Element {
+public:
+    MetricsElement();
+
+    static const MiniMetaObject::MetaObject *GetStaticMetaObject() noexcept;
+
+    [[nodiscard]] const MiniMetaObject::MetaObject *GetMetaObject() const noexcept override;
+};
+
 

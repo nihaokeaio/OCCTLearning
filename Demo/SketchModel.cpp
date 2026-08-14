@@ -34,8 +34,8 @@ void SketchModel::AddCircleAreaComputerNode(std::vector<PropertyAddress> in, std
     });
 }
 
-void SketchModel::AddComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out,
-                                  ComputerNode::ComputeFunc computeFunc) const
+ComputerNodeId SketchModel::AddComputerNode(std::vector<PropertyAddress> in, std::vector<PropertyAddress> out,
+                                            ComputerNode::ComputeFunc computeFunc, std::string debugName) const
 {
-    m_Context->AddComputeNode(std::move(in), std::move(out), std::move(computeFunc));
+    return m_Context->AddComputeNode(std::move(in), std::move(out), std::move(computeFunc), std::move(debugName));
 }

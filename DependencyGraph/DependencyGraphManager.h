@@ -10,6 +10,7 @@
 #include <V3d_View.hxx>
 
 #include <memory>
+#include <array>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -25,10 +26,13 @@ public:
 
     void InitializeDemoScene(const Handle(AIS_InteractiveContext)& context);
 
-    void EvaluateAndRefreshScene() const;
+    void EvaluateAndRefreshScene();
+
+    void DrawImGui();
 
 private:
     void BuildDemoGraph();
+    void PrintEvaluationLog() const;
 
 private:
     std::unique_ptr<SketchRuntime> m_SketchRuntime;
@@ -36,4 +40,8 @@ private:
     std::vector<PropertyAddress> m_Points;
     std::vector<PropertyAddress> m_Segments;
     std::vector<PropertyAddress> m_Circles;
+    std::vector<PropertyAddress> m_Metrics;
+    std::array<std::array<float, 3>, 3> m_PointEditorPositions{};
+    std::array<bool, 3> m_PointEditorDirty{};
+    GraphExecutor::EvaluationResult m_LastEvaluationResult;
 };

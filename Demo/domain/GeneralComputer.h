@@ -41,3 +41,13 @@ struct CircleAreaComputer
         view.SetOutput(0, std::numbers::pi * radiusLength * radiusLength);
     }
 };
+
+struct SumComputer
+{
+    void operator()(const ComputerView& view) const
+    {
+        const auto lhs = view.Input<double>(0);
+        const auto rhs = view.Input<double>(1);
+        view.SetOutput(0, lhs + rhs);
+    }
+};
