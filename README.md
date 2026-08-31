@@ -5,6 +5,26 @@ OpenCASCADE + GLFW + IMGUI Sample.
 
 https://tracker.dev.opencascade.org/view.php?id=33485
 
+## modernCpp 分支
+
+这个分支在原有 OcctImgui 示例之外，增加了一组以 GoogleTest 驱动的 Modern C++ 模板学习代码。示例按照 `Version1` 到 `Version8` 逐步演进，覆盖：
+
+- 模板参数推导、左值/右值、引用折叠与完美转发；
+- 类模板、全特化、偏特化和 `if constexpr`；
+- 自定义类型萃取、concept 与 requires；
+- 参数包、折叠表达式、tuple 与 `index_sequence`；
+- 普通函数、成员函数、函数对象及 lambda 的 `FunctionTraits`。
+
+学习代码位于 [`test/ModernTemplateTest.cpp`](test/ModernTemplateTest.cpp)，完整的版本演进、关键结论和复习建议见 [`docs/modern-cpp-template-learning.md`](docs/modern-cpp-template-learning.md)。
+
+模板测试目标使用 C++23，可单独构建和运行：
+
+```powershell
+cmake -S . -B cmake-build-debug-visual-studio -DBUILD_TESTING=ON
+cmake --build cmake-build-debug-visual-studio --target ModernCPPTest --config Debug
+ctest --test-dir cmake-build-debug-visual-studio -C Debug --output-on-failure
+```
+
 ## OpenCASCADE
   https://dev.opencascade.org/
   
