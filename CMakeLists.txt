@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.15)
 project(OcctImgui LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE})
@@ -21,6 +22,8 @@ file(GLOB_RECURSE SOURCES
 
 # Exclude CMake-generated files from the SOURCES list
 list(FILTER SOURCES EXCLUDE REGEX ".*CMakeFiles.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/test/.*")
+list(FILTER SOURCES EXCLUDE REGEX ".*/cmake-build[^/]*/.*")
 
 # Add executable target
 add_executable(OcctImgui ${SOURCES})
@@ -51,5 +54,34 @@ if(WIN32)
     elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
         set_target_properties(OcctImgui PROPERTIES VS_DEBUGGER_ENVIRONMENT "${RELEASE_ENVS}")
     endif()
+endif()
+
+include(CTest)
+
+if(BUILD_TESTING)
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+
+    # Keep the parent project's MSVC runtime selection on Windows.
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    add_executable(ThreadingTest
+        test/ThreadingTest.cpp
+    )
+    target_include_directories(ThreadingTest PRIVATE
+        ${CMAKE_SOURCE_DIR}
+    )
+    target_compile_features(ThreadingTest PRIVATE cxx_std_20)
+    target_link_libraries(ThreadingTest PRIVATE
+        GTest::gtest_main
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(ThreadingTest)
 endif()
 

@@ -1,6 +1,25 @@
 # OcctImgui
 OpenCASCADE + GLFW + IMGUI Sample.
 
+## ThreadEventLoop 学习分支
+
+本分支从 `ObjectRuntime` 创建，保留对象树与信号槽的融合代码，同时新增一个独立的 ISO C++20 线程学习模块。课程目标不是罗列线程
+API，而是逐步实现能够与现有对象系统融合的事件循环和 queued signal-slot。
+
+当前完成第一课：线程生命周期、RAII 与协作取消。
+
+- 可复用实现：[`Threading/StoppableWorker.h`](Threading/threadWorker.h)
+- GoogleTest 课程测试：[`test/ThreadingTest.cpp`](test/ThreadingTest.cpp)
+- 学习记录：[`docs/threading-learning-notes.md`](docs/threading-learning-notes.md)
+
+测试目标：
+
+```powershell
+cmake -S . -B cmake-build-debug-visual-studio -DBUILD_TESTING=ON
+cmake --build cmake-build-debug-visual-studio --target ThreadingTest --config Debug
+ctest --test-dir cmake-build-debug-visual-studio -C Debug --output-on-failure
+```
+
 ![occt imgui](occt-imgui.png "opencascade imgui")
 
 https://tracker.dev.opencascade.org/view.php?id=33485
