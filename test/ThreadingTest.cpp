@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <queue>
 #include <thread>
 
 TEST(ThreadBasics, CreateAndJoin) {
@@ -20,7 +21,6 @@ TEST(ThreadBasics, CreateAndJoin) {
 }
 
 TEST(ThreadBasics, ArgumentsAreCopiedByDefault) {
-
   // 按值传入，保存副本
   int value = 10;
   std::thread worker0(
@@ -84,7 +84,7 @@ TEST(ThreadSynchronization, MutexProtectsSharedCounter) {
 namespace Version4 {
 class Account {
 public:
-  explicit Account(const int balance): m_Balance(balance) {
+  explicit Account(const int balance) : m_Balance(balance) {
   }
 
   int Balance() {
@@ -127,13 +127,12 @@ TEST(MultipleMutexes, ScopedLockAvoidsDeadlock) {
       });
 
   firstWorker.join();
-  secondWorker.
-      join();
+  secondWorker.join();
 
   EXPECT_EQ(firstAccount.Balance(), 10000);
   EXPECT_EQ(secondAccount.Balance(), 10000);
 }
-}
+}// namespace Version4
 
 // 信号量
 namespace Version5 {
@@ -181,7 +180,7 @@ TEST(ConditionVariable, ConsumerWaitsForResult) {
 
   EXPECT_EQ(value, 10);
 }
-}
+}// namespace Version5
 
 namespace Version6 {
 TEST(Atomic, FetchAddDoesNotLoseUpdates) {
@@ -208,26 +207,54 @@ TEST(Atomic, FetchAddDoesNotLoseUpdates) {
   thread1.join();
   EXPECT_EQ(counter.load(), incrementCount * 2);
 }
-}
+}// namespace Version6
 
 namespace Version7 {
 TEST(StopToken, SourceAndTokenShareState) {
   std::stop_source stopSource;
   std::stop_token firstToken = stopSource.get_token();
   std::stop_token secondToken = firstToken;
+  bool callbackInvoked = false;
+  auto callback = std::stop_callback(
+      firstToken, [&callbackInvoked] {
+        callbackInvoked = true;
+      });
 
   EXPECT_TRUE(stopSource.stop_possible());
   EXPECT_FALSE(firstToken.stop_requested());
   EXPECT_FALSE(secondToken.stop_requested());
+  EXPECT_FALSE(callbackInvoked);
 
   EXPECT_TRUE(stopSource.request_stop());
   EXPECT_TRUE(stopSource.stop_possible());
+  EXPECT_TRUE(callbackInvoked);
 
   EXPECT_TRUE(firstToken.stop_requested());
   EXPECT_TRUE(secondToken.stop_requested());
 
   EXPECT_FALSE(stopSource.request_stop());
+}
 
+TEST(JThread, ExplicitStopRequest) {
+  bool stopObserved = false;
+
+  std::jthread worker(
+      [&stopObserved](const std::stop_token token) {
+        while (!token.stop_requested()) {
+          std::this_thread::yield();
+        }
+
+        stopObserved = true;
+      });
+  //发出停止请求
+  EXPECT_TRUE(worker.request_stop());
+  worker.join();
+
+  // 若交换，则程序会卡在工作线程中等待停止信号处
+  // worker.join();
+  // EXPECT_TRUE(worker.request_stop());
+
+  EXPECT_TRUE(stopObserved);
 }
 
 TEST(JThread, DestructorRequestsStopAndJoins) {
@@ -243,4 +270,57 @@ TEST(JThread, DestructorRequestsStopAndJoins) {
   }
   EXPECT_TRUE(stopObserved);
 }
+}// namespace Version7
+
+namespace Version8 {
+template<typename T>
+class BlockQueue {
+public:
+  void Push(T v) {
+    {
+      std::lock_guard lock(m_Mutex);
+      m_Queue.push(std::move(v));
+    }
+    m_CV.notify_one();
+  }
+
+  T Pop() {
+    std::unique_lock lock(m_Mutex);
+    m_CV.wait(
+        lock, [this] {
+          return !m_Queue.empty();
+        });
+    T v = std::move(m_Queue.front());
+    m_Queue.pop();
+    return v;
+  }
+
+private:
+  std::queue<T> m_Queue;
+  std::mutex m_Mutex;
+  std::condition_variable m_CV;
+};
+
+TEST(BlockingQueue, ConsumerWaitsForProducer) {
+  BlockQueue<std::unique_ptr<int>> queue;
+  int value = 0;
+  std::thread producer(
+      [&] {
+        queue.Push(std::make_unique<int>(1));
+      });
+  std::thread consumer(
+      [&] {
+        const auto vp = queue.Pop();
+        value = *vp;
+      });
+  producer.join();
+  consumer.join();
+  EXPECT_EQ(value, 1);
 }
+
+TEST(BlockingQueue, ValuePushedBeforeWaitCanBeRead) {
+}
+
+TEST(BlockingQueue, ValuesArePoppedInFifoOrder) {
+}
+}// namespace Version8
