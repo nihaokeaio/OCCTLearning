@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <future>
+#include <queue>
 #include <queue>
 #include <thread>
 
@@ -301,7 +303,7 @@ private:
   std::condition_variable m_CV;
 };
 
-TEST(BlockingQueue, ConsumerWaitsForProducer) {
+TEST(BlockingQueue, MoveOnlyValueCanBeTransferredBetweenThreads) {
   BlockQueue<std::unique_ptr<int>> queue;
   int value = 0;
   std::thread producer(
@@ -310,7 +312,7 @@ TEST(BlockingQueue, ConsumerWaitsForProducer) {
       });
   std::thread consumer(
       [&] {
-        const auto vp = queue.Pop();
+        auto vp = queue.Pop();
         value = *vp;
       });
   producer.join();
@@ -318,9 +320,285 @@ TEST(BlockingQueue, ConsumerWaitsForProducer) {
   EXPECT_EQ(value, 1);
 }
 
+//先发送，再监听
 TEST(BlockingQueue, ValuePushedBeforeWaitCanBeRead) {
+  BlockQueue<std::unique_ptr<int>> queue;
+  queue.Push(std::make_unique<int>(10));
+  int value = 0;
+  // 消费时queue已经有数据，故不再等待
+  std::thread consumer(
+      [&] {
+        const auto vp = queue.Pop();
+        value = *vp;
+      });
+  consumer.join();
+  EXPECT_EQ(value, 10);
 }
 
 TEST(BlockingQueue, ValuesArePoppedInFifoOrder) {
+  BlockQueue<int> queue;
+  queue.Push(1);
+  queue.Push(2);
+  queue.Push(3);
+  EXPECT_EQ(queue.Pop(), 1);
+  EXPECT_EQ(queue.Pop(), 2);
+  EXPECT_EQ(queue.Pop(), 3);
 }
 }// namespace Version8
+
+namespace Version9 {
+template<typename T>
+class BlockQueue {
+public:
+  void Push(T v) {
+    {
+      std::lock_guard lock(m_Mutex);
+      if (m_Closed) {
+        throw std::runtime_error("Blocking queue is closed");
+      }
+      m_Queue.push(std::move(v));
+    }
+    m_CV.notify_one();
+  }
+
+  std::optional<T> Pop() {
+    std::unique_lock lock(m_Mutex);
+    m_CV.wait(
+        lock, [this] {
+          return m_Closed || !m_Queue.empty();
+        });
+    if (m_Queue.empty())
+      return std::nullopt;
+    T v = std::move(m_Queue.front());
+    m_Queue.pop();
+    return v;
+  }
+
+  void Close() {
+    {
+      std::lock_guard lock(m_Mutex);
+      m_Closed = true;
+    }
+    m_CV.notify_all();
+  }
+
+private:
+  std::queue<T> m_Queue;
+  std::mutex m_Mutex;
+  std::condition_variable m_CV;
+  bool m_Closed = false;
+};
+
+TEST(CloseableBlockingQueue, CloseOnEmptyQueueReturnsNullopt) {
+  BlockQueue<std::unique_ptr<int>> queue;
+  int value = 0;
+  std::optional<std::unique_ptr<int>> ret;
+  std::thread consumer(
+      [&] {
+        ret = queue.Pop();
+        if (ret.has_value())
+          value = *ret.value();
+      });
+  queue.Close();
+  consumer.join();
+  EXPECT_FALSE(ret.has_value());
+  EXPECT_EQ(value, 0);
+}
+
+TEST(CloseableBlockingQueue, CloseOnPopElement) {
+  BlockQueue<int> queue;
+  queue.Push(1);
+  queue.Push(2);
+  queue.Push(3);
+  queue.Close();
+  EXPECT_EQ(queue.Pop(), 1);
+  EXPECT_EQ(queue.Pop(), 2);
+  EXPECT_EQ(queue.Pop(), 3);
+  // 所有元素弹出后，返回std::nullopt
+  EXPECT_FALSE(queue.Pop().has_value());
+  // 关闭后拒绝push
+  EXPECT_THROW(queue.Push(4), std::runtime_error);
+}
+
+}
+
+
+namespace Version10 {
+
+using Task = std::function<void()>;
+
+class EventLoop {
+public:
+  void Post(Task task) {
+    m_Queue.Push(std::move(task));
+  }
+
+  void Run() {
+    while (true) {
+      auto task = m_Queue.Pop();
+      if (!task.has_value())
+        return;
+      task.value()();
+    }
+  }
+
+  void Stop() {
+    m_Queue.Close();
+  }
+
+private:
+  Version9::BlockQueue<Task> m_Queue;
+};
+
+/// 任务队列中的任务在事件循环线程中执行
+TEST(EventLoop, PostedTaskRunsOnLoopThread) {
+  EventLoop loop;
+  std::thread::id id0;
+  std::thread::id id1;
+  std::thread::id id2;
+  std::thread::id mainLoopId;
+  loop.Post(
+      [&] {
+        id0 = std::this_thread::get_id();
+      });
+  loop.Post(
+      [&] {
+        id1 = std::this_thread::get_id();
+      });
+  loop.Post(
+      [&] {
+        id2 = std::this_thread::get_id();
+      });
+
+  std::jthread worker(
+      [&] {
+        mainLoopId = std::this_thread::get_id();
+        loop.Run();
+      });
+  loop.Stop();
+  worker.join();
+  EXPECT_EQ(mainLoopId, id0);
+  EXPECT_EQ(mainLoopId, id1);
+  EXPECT_EQ(mainLoopId, id2);
+}
+
+/// 调度顺序以加入任务队列为序
+TEST(EventLoop, TasksRunInPostingOrder) {
+  EventLoop loop;
+  std::vector<int> orders;
+  loop.Post(
+      [&] {
+        orders.push_back(1);
+      });
+  loop.Post(
+      [&] {
+        orders.push_back(2);
+      });
+  loop.Post(
+      [&] {
+        orders.push_back(3);
+      });
+
+  std::jthread worker(
+      [&] {
+        loop.Run();
+      });
+  loop.Stop();
+  worker.join();
+  EXPECT_EQ(orders, std::vector<int>({ 1, 2, 3 }));
+}
+
+/// 调度循环关闭后，积压任务仍可继续执行
+TEST(EventLoop, StopDrainsPostedTasksAndExits) {
+  EventLoop loop;
+  std::vector<int> orders;
+  loop.Post(
+      [&] {
+        orders.push_back(1);
+      });
+  loop.Post(
+      [&] {
+        orders.push_back(2);
+      });
+  loop.Post(
+      [&] {
+        orders.push_back(3);
+      });
+  loop.Stop();
+  loop.Run();
+  EXPECT_EQ(orders, std::vector<int>({ 1, 2, 3 }));
+}
+
+}
+
+namespace Version11 {
+using Task = std::function<void()>;
+
+class EventLoopThread {
+public:
+  EventLoopThread() {
+    m_Thread = std::jthread(
+        [this] {
+          m_Loop.Run();
+        });
+  }
+
+  ~EventLoopThread() {
+    m_Loop.Stop();
+  }
+
+  void Post(Task task) {
+    m_Loop.Post(std::move(task));
+  }
+
+  EventLoopThread(const EventLoopThread &) = delete;
+  EventLoopThread &operator=(const EventLoopThread &) = delete;
+  EventLoopThread(EventLoopThread &&) = delete;
+  EventLoopThread &operator=(EventLoopThread &&) = delete;
+
+private:
+  Version10::EventLoop m_Loop;
+  std::jthread m_Thread;
+};
+
+TEST(EventLoopThread, DestructorDrainsPostedTasks) {
+  std::vector<int> orders;
+  // 析构后，loop正常join，队列循环可以正常退出
+  {
+    EventLoopThread loop;
+    loop.Post(
+        [&] {
+          orders.push_back(1);
+        });
+    loop.Post(
+        [&] {
+          orders.push_back(2);
+        });
+    loop.Post(
+        [&] {
+          orders.push_back(3);
+        });
+  }
+  EXPECT_EQ(orders, std::vector<int>({ 1, 2, 3 }));
+}
+
+TEST(EventLoopThread, EmptyWorkerCanBeDestroyed) {
+  {
+    EventLoopThread loop;
+  }
+  //即便是空的队列，析构后，程序可以继续正常进行
+  SUCCEED();
+}
+
+TEST(EventLoopThread, TaskResultCanBeReadBeforeWorkerDestruction) {
+  EventLoopThread loop;
+  std::promise<int> promise;
+  std::future<int> future = promise.get_future();
+  loop.Post(
+      [&promise] {
+        promise.set_value(10);
+      });
+  EXPECT_EQ(future.get(), 10);
+  //loop无需析构，仍可以继续队列
+}
+}
